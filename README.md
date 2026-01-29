@@ -1,6 +1,7 @@
 ## Magic Project – Django MTG Creation App
 
-This project is a Django application for creating and managing Magic: The Gathering (MTG) content.  
+This project is a Django application for creating and managing new decks in  Magic: The Gathering (MTG).
+The application using AI will suggeste new decks based on the user's preferences. 
 The main Django app is called `MTG_CREATION_APP`.
 
 ### Getting started

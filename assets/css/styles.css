@@ -1,0 +1,9 @@
+.mana-icon-hover {
+    font-size: 2rem;
+    transition: transform 0.2s ease-in-out;
+    cursor: pointer;
+}
+
+.mana-icon-hover:hover {
+    transform: scale(1.30);
+}
