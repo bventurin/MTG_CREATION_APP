@@ -7,3 +7,8 @@
 .mana-icon-hover:hover {
     transform: scale(1.30);
 }
+
+body {
+    background-color: #ffffff;
+    color: #212529;
+}
