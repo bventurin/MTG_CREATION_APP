@@ -1,0 +1,16 @@
+.mana-icon-hover {
+    font-size: 2rem;
+    /* Use 'all' to smoothly animate both hover (transform) and selection (filter) effects */
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+}
+
+.mana-icon-hover:hover {
+    transform: scale(1.30);
+}
+
+/* When a mana color is selected, add a dark glow to show it's active */
+.btn-check:checked+.btn>i {
+    /* Increased blur-radius for a more prominent, darker glow */
+    filter: drop-shadow(0 0 8px black);
+}
