@@ -15,10 +15,11 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
-from MTG_CREATION_APP import views
+from django.urls import include, path
+from deck_builder import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', views.home, name='home'),
+    path('', include('deck_builder.urls')),
+    path('recommendations/', include('card_recommender.urls')),
 ]

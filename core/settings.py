@@ -37,7 +37,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'MTG_CREATION_APP',
+    'deck_builder',
+    'card_recommender',
 ]
 
 MIDDLEWARE = [
