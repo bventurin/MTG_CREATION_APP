@@ -8,4 +8,4 @@ def recommendations(request):
         colors = request.POST.getlist('colors')
         recs = CardRecommender.get_recommendations(format_name, colors)
         
-    return render(request, 'card_recommender/index.html', {'recommendations': recs})
+    return render(request, 'card_recommender/recommendations.html', {'recommendations': recs})
