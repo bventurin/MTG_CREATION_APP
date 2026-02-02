@@ -17,10 +17,10 @@ if not settings.configured:
 import sys
 sys.path.append('/Users/brennoventurini/Magic Project')
 
-from MTG_CREATION_APP.services.ai_recommender import CardRecommender
+from card_recommender.services.ai_recommender import get_deck_recommendations
 
-print("Testing CardRecommender...")
-recs = CardRecommender.get_recommendations('modern', ['R', 'U'])
-print(f"Found {len(recs)} recommendations.")
-for card in recs:
-    print(f"- {card.get('name')}")
+print("Testing Deck Recommendation Agent...")
+recs = get_deck_recommendations("commander", ["R", "U"])
+print(f"Found {len(recs)} deck recommendations.")
+for deck in recs:
+    print(f"- {deck.get('title')} (commander: {deck.get('commander')})")
