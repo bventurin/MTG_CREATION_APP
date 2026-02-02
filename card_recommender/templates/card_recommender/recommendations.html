@@ -1,7 +1,7 @@
 {% extends 'deck_builder/base.html' %}
 {% load static %}
 
-{% block title %}AI Card Recommender{% endblock %}
+{% block title %}Deck Recommender{% endblock %}
 
 {% block content %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}">
@@ -10,9 +10,8 @@
     <section class="py-5 text-center">
         <div class="row py-lg-5">
             <div class="col-lg-6 col-md-8 mx-auto">
-                <h1 class="fw-light mb-4">AI Card Recommender</h1>
-                <p class="lead text-muted mb-5">Select a format and your preferred colors to get Magic: The Gathering
-                    card suggestions.</p>
+                <h1 class="fw-light mb-4">Deck Recommender</h1>
+                <p class="lead text-muted mb-5">Pick a format and your colors to get deck ideas (e.g. Commander + colors).</p>
                 <div class="d-flex justify-content-center mb-4">
                     <a href="/" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back to Home</a>
                 </div>
@@ -82,25 +81,46 @@
         </div>
     </section>
 
-    <!-- Results Section -->
+    <!-- Results Section: Deck recommendations -->
     {% if recommendations %}
     <div class="py-5">
-        <h3 class="text-center mb-4 fw-light">Recommended Cards</h3>
-        <div class="row row-cols-1 row-cols-md-3 row-cols-xl-5 g-4 justify-content-center">
-            {% for card in recommendations %}
+        <h3 class="text-center mb-4 fw-light">Recommended Decks</h3>
+        <p class="text-center text-muted mb-4">Based on your format and colors.</p>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 justify-content-center">
+            {% for deck in recommendations %}
             <div class="col">
                 <div class="card h-100 shadow-sm border-0 bg-light">
-                    <div class="card-body p-3 d-flex flex-column align-items-center text-center">
-                        {% if card.image_uris %}
-                        <img src="{{ card.image_uris.normal }}" class="img-fluid rounded shadow-sm mb-3"
-                            alt="{{ card.name }}">
-                        {% else %}
-                        <div class="bg-secondary text-white rounded d-flex align-items-center justify-content-center shadow-sm mb-3"
-                            style="width: 100%; aspect-ratio: 2.5/3.5;">
-                            <span>No Image</span>
+                    <div class="card-body">
+                        <h5 class="card-title">{{ deck.title }}</h5>
+                        {% if deck.theme %}
+                        <p class="badge bg-primary mb-2">{{ deck.theme }}</p>
+                        {% endif %}
+                        {% if deck.commander %}
+                        <p class="small mb-2"><strong>Commander:</strong> {{ deck.commander }}</p>
+                        {% if deck.commander_image_url %}
+                        <div class="mb-3 text-center">
+                            <img src="{{ deck.commander_image_url }}" alt="{{ deck.commander }}" class="rounded shadow-sm deck-card-img" style="max-width: 100%; width: 200px; aspect-ratio: 2.5/3.5; object-fit: cover;">
                         </div>
                         {% endif %}
-                        <h6 class="card-title mb-0">{{ card.name }}</h6>
+                        {% endif %}
+                        <p class="card-text small text-muted">{{ deck.description }}</p>
+                        {% if deck.key_cards_with_images %}
+                        <p class="small mb-2"><strong>Key cards:</strong></p>
+                        <div class="d-flex flex-wrap gap-2 justify-content-center">
+                            {% for item in deck.key_cards_with_images %}
+                            <div class="text-center">
+                                {% if item.image_url %}
+                                <img src="{{ item.image_url }}" alt="{{ item.name }}" title="{{ item.name }}" class="rounded shadow-sm key-card-img" style="width: 80px; height: auto; aspect-ratio: 2.5/3.5; object-fit: cover;">
+                                {% else %}
+                                <span class="small text-muted">{{ item.name }}</span>
+                                {% endif %}
+                                <p class="small mb-0 mt-1 text-muted" style="font-size: 0.7rem; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">{{ item.name }}</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% elif deck.key_cards %}
+                        <p class="small mb-0"><strong>Key cards:</strong> {{ deck.key_cards|join:", " }}</p>
+                        {% endif %}
                     </div>
                 </div>
             </div>
