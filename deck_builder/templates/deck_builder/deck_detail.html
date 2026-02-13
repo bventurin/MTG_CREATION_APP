@@ -13,6 +13,7 @@
         </div>
         <div class="col-auto">
             <div class="btn-group" role="group">
+                <a href="{% url 'get_recommendations' deck.deck_id %}" class="btn btn-success"><i class="bi bi-lightbulb me-2"></i>Get AI Suggestions</a>
                 <a href="{% url 'edit_deck' deck.deck_id %}" class="btn btn-outline-primary"><i class="bi bi-pencil me-2"></i>Edit</a>
                 <a href="{% url 'deck_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back</a>
             </div>

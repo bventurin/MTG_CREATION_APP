@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from .services.dynamodb_service import DynamoDBService
+from card_recommender.services.ai_recommender import DeckRecommendationAgent
 import re
 
 # Create your views here.
@@ -178,3 +179,39 @@ def delete_deck(request, deck_id):
         return redirect('deck_list')
     
     return render(request, 'deck_builder/delete_deck.html', {'deck': deck})
+
+@login_required(login_url='login')
+def get_recommendations(request, deck_id):
+    """Get AI recommendations for improving a deck and optionally add them"""
+    db = DynamoDBService()
+    deck = db.get_deck(str(request.user.id), str(deck_id))
+    
+    if not deck:
+        return redirect('deck_list')
+    
+    # Get all cards in the main deck
+    all_cards = db.get_deck_cards(str(deck_id))
+    main_deck = [c for c in all_cards if not c.get('is_sideboard')]
+    
+    # Handle POST request to add recommended cards to deck
+    if request.method == 'POST':
+        card_names_to_add = request.POST.getlist('cards')
+        if card_names_to_add:
+            # Add each recommended card with quantity 1
+            new_cards = [{'card_name': name, 'quantity': 1, 'is_sideboard': False} for name in card_names_to_add]
+            updated_cards = main_deck + new_cards
+            db.update_deck(str(request.user.id), str(deck_id), deck.get('name'), updated_cards)
+            return redirect('deck_detail', deck_id=deck_id)
+    
+    # Create list of card names for the AI
+    card_names = [c['card_name'] for c in main_deck]
+    
+    # Get recommendations from AI
+    agent = DeckRecommendationAgent()
+    recommendations = agent.get_deck_improvement_recommendations(card_names, format_name="standard")
+    
+    context = {
+        'deck': deck,
+        'recommendations': recommendations,
+    }
+    return render(request, 'deck_builder/recommendations.html', context)

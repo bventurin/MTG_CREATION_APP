@@ -1,0 +1,87 @@
+{% extends 'deck_builder/base.html' %}
+
+{% block title %}AI Recommendations - {{ deck.name }} - Magic Deck Builder{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>AI Card Recommendations</h2>
+            <p class="text-muted">For: <strong>{{ deck.name }}</strong></p>
+        </div>
+        <div class="col-auto">
+            <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back to Deck</a>
+        </div>
+    </div>
+
+    {% if recommendations %}
+    <form method="post" class="row">
+        {% csrf_token %}
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">
+                        <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+                        Suggested Cards to Improve Your Deck
+                    </h5>
+                    
+                    <p class="text-muted mb-4">
+                        Based on your current deck composition, our AI recommends these cards to enhance synergy and strengthen your strategy.
+                    </p>
+                    
+                    <div class="list-group">
+                        {% for card in recommendations %}
+                        <div class="list-group-item">
+                            <div class="form-check d-flex align-items-center">
+                                <input class="form-check-input me-3" type="checkbox" name="cards" value="{{ card }}" id="card_{{ forloop.counter }}">
+                                <label class="form-check-label flex-grow-1 mb-0" for="card_{{ forloop.counter }}">
+                                    {{ card }}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-success me-2">
+                            <i class="bi bi-plus-circle me-2"></i>Add Selected to Deck
+                        </button>
+                        <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-outline-secondary">
+                            Skip
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card border-info">
+                <div class="card-body">
+                    <h6 class="card-title">How it works</h6>
+                    <ul class="list-unstyled small text-muted">
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Select cards to add
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Click "Add Selected to Deck"
+                        </li>
+                        <li>
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Cards added with quantity 1
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </form>
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <strong>No recommendations available.</strong> Make sure your deck has cards and try again.
+    </div>
+    <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-primary">Back to Deck</a>
+    {% endif %}
+</div>
+{% endblock %}
