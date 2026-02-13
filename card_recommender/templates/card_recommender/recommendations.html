@@ -6,12 +6,11 @@
 {% block content %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}">
 <div class="container py-5">
-    <!-- Hero Section with Form -->
     <section class="py-5 text-center">
         <div class="row py-lg-5">
             <div class="col-lg-6 col-md-8 mx-auto">
                 <h1 class="fw-light mb-4">Deck Recommender</h1>
-                <p class="lead text-muted mb-5">Pick a format and your colors to get a list of deck (e.g. Commander + colors).</p>
+                <p class="lead text-muted mb-5">Pick a format and the colors to get a card recommendations.</p>
                 <div class="d-flex justify-content-center mb-4">
                     <a href="/" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back to Home</a>
                 </div>
@@ -25,7 +24,7 @@
                             <option value="standard">Standard</option>
                             <option value="modern">Pre-Modern</option>
                             <option value="commander">Commander</option>
-                            
+
                         </select>
                     </div>
 
@@ -80,7 +79,6 @@
         </div>
     </section>
 
-    <!-- Results Section: Deck recommendations -->
     {% if recommendations %}
     <div class="py-5">
         <h3 class="text-center mb-4 fw-light">Recommended Decks</h3>
@@ -98,7 +96,9 @@
                         <p class="small mb-2"><strong>Commander:</strong> {{ deck.commander }}</p>
                         {% if deck.commander_image_url %}
                         <div class="mb-3 text-center">
-                            <img src="{{ deck.commander_image_url }}" alt="{{ deck.commander }}" class="rounded shadow-sm deck-card-img" style="max-width: 100%; width: 200px; aspect-ratio: 2.5/3.5; object-fit: cover;">
+                            <img src="{{ deck.commander_image_url }}" alt="{{ deck.commander }}"
+                                class="rounded shadow-sm deck-card-img"
+                                style="max-width: 100%; width: 200px; aspect-ratio: 2.5/3.5; object-fit: cover;">
                         </div>
                         {% endif %}
                         {% endif %}
@@ -109,11 +109,15 @@
                             {% for item in deck.key_cards_with_images %}
                             <div class="text-center">
                                 {% if item.image_url %}
-                                <img src="{{ item.image_url }}" alt="{{ item.name }}" title="{{ item.name }}" class="rounded shadow-sm key-card-img" style="width: 80px; height: auto; aspect-ratio: 2.5/3.5; object-fit: cover;">
+                                <img src="{{ item.image_url }}" alt="{{ item.name }}" title="{{ item.name }}"
+                                    class="rounded shadow-sm key-card-img"
+                                    style="width: 80px; height: auto; aspect-ratio: 2.5/3.5; object-fit: cover;">
                                 {% else %}
                                 <span class="small text-muted">{{ item.name }}</span>
                                 {% endif %}
-                                <p class="small mb-0 mt-1 text-muted" style="font-size: 0.7rem; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">{{ item.name }}</p>
+                                <p class="small mb-0 mt-1 text-muted"
+                                    style="font-size: 0.7rem; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">
+                                    {{ item.name }}</p>
                             </div>
                             {% endfor %}
                         </div>

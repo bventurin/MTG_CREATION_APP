@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
 from .services.ai_recommender import get_deck_recommendations
 from .services.scryfall import ScryfallService
 
@@ -26,6 +27,7 @@ def _get_card_data(name):
     }
 
 
+@login_required(login_url='login')
 def recommendations(request):
     recs = []
     if request.method == "POST":

@@ -10,10 +10,8 @@
             <div class="col-lg-6 col-md-8 mx-auto">
                 <h1 class="fw-light mb-4">Magic Deck Builder</h1>
                 <p>
-                    <a href="#" class="btn btn-primary btn-lg my-2"><i class="bi bi-plus-circle me-2"></i>Create a
-                        Deck</a>
                     <a href="{% url 'recommendations' %}" class="btn btn-secondary btn-lg my-2"><i
-                            class="bi bi-magic me-2"></i>AI Recommender</a>
+                            class="bi bi-magic me-2"></i>Create Deck</a>
                 </p>
 
                 <!-- Search Bar -->
@@ -23,50 +21,21 @@
                             class="bi bi-search"></i> Search</button>
                 </div> {% endcomment %}
 
-                <!-- Mana Filters -->
+                <!-- Mana Icons -->
                 <div class="d-flex justify-content-center gap-4 mt-4">
-                    <div class="form-check p-0">
-                        <input type="checkbox" class="btn-check" id="mana-w" autocomplete="off">
-                        <label class="btn p-0 border-0" for="mana-w" title="White">
-                            <i class="ms ms-w ms-cost ms-shadow mana-icon-hover display-4"></i>
-                        </label>
-                    </div>
-                    <div class="form-check p-0">
-                        <input type="checkbox" class="btn-check" id="mana-u" autocomplete="off">
-                        <label class="btn p-0 border-0" for="mana-u" title="Blue">
-                            <i class="ms ms-u ms-cost ms-shadow mana-icon-hover display-4"></i>
-                        </label>
-                    </div>
-                    <div class="form-check p-0">
-                        <input type="checkbox" class="btn-check" id="mana-b" autocomplete="off">
-                        <label class="btn p-0 border-0" for="mana-b" title="Black">
-                            <i class="ms ms-b ms-cost ms-shadow mana-icon-hover display-4"></i>
-                        </label>
-                    </div>
-                    <div class="form-check p-0">
-                        <input type="checkbox" class="btn-check" id="mana-r" autocomplete="off">
-                        <label class="btn p-0 border-0" for="mana-r" title="Red">
-                            <i class="ms ms-r ms-cost ms-shadow mana-icon-hover display-4"></i>
-                        </label>
-                    </div>
-                    <div class="form-check p-0">
-                        <input type="checkbox" class="btn-check" id="mana-g" autocomplete="off">
-                        <label class="btn p-0 border-0" for="mana-g" title="Green">
-                            <i class="ms ms-g ms-cost ms-shadow mana-icon-hover display-4"></i>
-                        </label>
-                    </div>
-                    <div class="form-check p-0">
-                        <input type="checkbox" class="btn-check" id="mana-c" autocomplete="off">
-                        <label class="btn p-0 border-0" for="mana-c" title="Colorless">
-                            <i class="ms ms-c ms-cost ms-shadow mana-icon-hover display-4"></i>
-                        </label>
-                    </div>
+                    <i class="ms ms-w ms-cost ms-shadow" style="font-size: 2rem;" title="White"></i>
+                    <i class="ms ms-u ms-cost ms-shadow" style="font-size: 2rem;" title="Blue"></i>
+                    <i class="ms ms-b ms-cost ms-shadow" style="font-size: 2rem;" title="Black"></i>
+                    <i class="ms ms-r ms-cost ms-shadow" style="font-size: 2rem;" title="Red"></i>
+                    <i class="ms ms-g ms-cost ms-shadow" style="font-size: 2rem;" title="Green"></i>
+                    <i class="ms ms-c ms-cost ms-shadow" style="font-size: 2rem;" title="Colorless"></i>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Grid Section -->
+    <!--  Only visible if the user is login -->
+    {% if user.is_authenticated %}
     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
         <!-- Card 1 -->
         <div class="col">
@@ -129,5 +98,10 @@
             </div>
         </div>
     </div>
+    {% else %}
+    <div class="text-center py-5">
+        <p class="lead">To see your decks please <a href="{% url 'login' %}">log in</a>.</p>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
