@@ -10,8 +10,15 @@
             <div class="col-lg-6 col-md-8 mx-auto">
                 <h1 class="fw-light mb-4">Magic Deck Builder</h1>
                 <p>
+                    {% if user.is_authenticated %}
+                    <a href="{% url 'create_deck' %}" class="btn btn-primary btn-lg my-2"><i
+                            class="bi bi-plus-lg me-2"></i>Import Deck</a>
+                    <a href="{% url 'deck_list' %}" class="btn btn-outline-secondary btn-lg my-2"><i
+                            class="bi bi-collection me-2"></i>My Decks</a>
+                    {% else %}
                     <a href="{% url 'recommendations' %}" class="btn btn-secondary btn-lg my-2"><i
-                            class="bi bi-magic me-2"></i>Create Deck</a>
+                            class="bi bi-magic me-2"></i>Get Recommendations</a>
+                    {% endif %}
                 </p>
 
                 <!-- Search Bar -->

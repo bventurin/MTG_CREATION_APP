@@ -1,0 +1,46 @@
+{% extends 'deck_builder/base.html' %}
+
+{% block title %}Create Deck - Magic Deck Builder{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <h2 class="mb-4">Import Deck</h2>
+                    <p class="text-muted mb-4">Paste your deck list below. Format should include quantity and card name on each line.</p>
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="mb-4">
+                            <label for="deck_list" class="form-label fw-bold">Deck List</label>
+                            <textarea 
+                                name="deck_list" 
+                                id="deck_list" 
+                                class="form-control" 
+                                rows="15"
+                                placeholder="About Name Izzet Aggro&#10;&#10;Deck&#10;4 Lightning Strike&#10;4 Razorkin Needlehead&#10;2 Shock&#10;... more cards ...&#10;&#10;Sideboard&#10;2 Sear&#10;4 Magebane Lizard&#10;... sideboard cards ..."></textarea>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">Import Deck</button>
+                            <a href="{% url 'deck_list' %}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </form>
+
+                    <hr class="my-4">
+                    <h5>Format Instructions:</h5>
+                    <ul class="small text-muted">
+                        <li><strong>About Name:</strong> Use "About Name DeckName" for the deck name</li>
+                        <li><strong>Deck section:</strong> Start with "Deck" on its own line</li>
+                        <li><strong>Card format:</strong> Each card should be "QUANTITY CardName"</li>
+                        <li><strong>Sideboard:</strong> Start with "Sideboard" on its own line</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

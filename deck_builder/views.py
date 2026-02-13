@@ -1,6 +1,180 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from .services.dynamodb_service import DynamoDBService
+import re
 
 # Create your views here.
 
 def home(request):
     return render(request, 'deck_builder/home.html')
+
+@login_required(login_url='login')
+def create_deck(request):
+    db = DynamoDBService()
+    
+    if request.method == 'POST':
+        deck_list_text = request.POST.get('deck_list', '')
+        deck_name = 'Untitled Deck'
+        cards_data = []
+        
+        lines = deck_list_text.strip().split('\n')
+        current_section = None
+
+        # Default to 'deck' section if no section headers are found
+        if 'deck' not in [line.strip().lower() for line in lines if line.strip().lower() in ['deck', 'sideboard']]:
+            current_section = 'deck'
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.lower() == 'deck':
+                current_section = 'deck'
+                continue
+            elif line.lower() == 'sideboard':
+                current_section = 'sideboard'
+                continue
+            elif line.lower().startswith('name '):
+                deck_name = line[5:].strip()
+                continue
+            elif line.lower() in ['about']:
+                continue
+
+            # Card line format: "4 Card Name"
+            match = re.match(r'^(\d+)\s+(.*)', line)
+            if match and current_section:
+                quantity = int(match.group(1))
+                card_name = match.group(2).strip()
+                is_sideboard = (current_section == 'sideboard')
+                
+                cards_data.append({
+                    'card_name': card_name,
+                    'quantity': quantity,
+                    'is_sideboard': is_sideboard
+                })
+
+        if cards_data:
+            deck_id = db.create_deck(str(request.user.id), deck_name, cards_data)
+            return redirect('deck_detail', deck_id=deck_id)
+
+    return render(request, 'deck_builder/create_deck.html')
+
+@login_required(login_url='login')
+def deck_list(request):
+    db = DynamoDBService()
+    decks = db.get_user_decks(str(request.user.id))
+    
+    # Add card count for each deck
+    for deck in decks:
+        cards = db.get_deck_cards(deck['deck_id'])
+        deck['card_count'] = sum(c['quantity'] for c in cards)
+    
+    return render(request, 'deck_builder/deck_list.html', {'decks': decks})
+
+@login_required(login_url='login')
+def deck_detail(request, deck_id):
+    db = DynamoDBService()
+    deck = db.get_deck(str(request.user.id), str(deck_id))
+    
+    if not deck:
+        return redirect('deck_list')
+    
+    all_cards = db.get_deck_cards(str(deck_id))
+    main_deck = [c for c in all_cards if not c.get('is_sideboard')]
+    sideboard = [c for c in all_cards if c.get('is_sideboard')]
+    
+    context = {
+        'deck': deck,
+        'main_deck': sorted(main_deck, key=lambda x: x['card_name']),
+        'sideboard': sorted(sideboard, key=lambda x: x['card_name']),
+        'main_deck_count': sum(c['quantity'] for c in main_deck),
+        'sideboard_count': sum(c['quantity'] for c in sideboard),
+    }
+    return render(request, 'deck_builder/deck_detail.html', context)
+
+@login_required(login_url='login')
+def edit_deck(request, deck_id):
+    db = DynamoDBService()
+    deck = db.get_deck(str(request.user.id), str(deck_id))
+    
+    if request.method == 'POST':
+        deck_name = request.POST.get('deck_name', deck.get('name'))
+        deck_list_text = request.POST.get('deck_list', '')
+        
+        main_deck = []
+        sideboard = []
+        
+        lines = deck_list_text.strip().split('\n')
+        current_section = None
+
+        # Default to 'deck' section if no section headers are found
+        if 'deck' not in [line.strip().lower() for line in lines if line.strip().lower() in ['deck', 'sideboard']]:
+            current_section = 'deck'
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.lower() == 'deck':
+                current_section = 'deck'
+                continue
+            elif line.lower() == 'sideboard':
+                current_section = 'sideboard'
+                continue
+            elif line.lower().startswith('name '):
+                # Allow overriding deck name from text
+                if not request.POST.get('deck_name'):
+                    deck_name = line[5:].strip()
+                continue
+            elif line.lower() in ['about']:
+                continue
+
+            # Card line format: "4 Card Name"
+            match = re.match(r'^(\d+)\s+(.*)', line)
+            if match and current_section:
+                quantity = int(match.group(1))
+                card_name = match.group(2).strip()
+                
+                if current_section == 'deck':
+                    main_deck.append({'quantity': quantity, 'card_name': card_name, 'is_sideboard': False})
+                elif current_section == 'sideboard':
+                    sideboard.append({'quantity': quantity, 'card_name': card_name, 'is_sideboard': True})
+
+        if main_deck or sideboard:
+            all_cards = main_deck + sideboard
+            db.update_deck(str(request.user.id), str(deck_id), deck_name, all_cards)
+            return redirect('deck_detail', deck_id=deck_id)
+
+    # Get current deck contents for the form
+    all_cards = db.get_deck_cards(str(deck_id))
+    main_deck = sorted([c for c in all_cards if not c.get('is_sideboard')], key=lambda x: x['card_name'])
+    sideboard = sorted([c for c in all_cards if c.get('is_sideboard')], key=lambda x: x['card_name'])
+    
+    # Format for textarea
+    deck_text = "Deck\n"
+    for card in main_deck:
+        deck_text += f"{card['quantity']} {card['card_name']}\n"
+    
+    if sideboard:
+        deck_text += "\nSideboard\n"
+        for card in sideboard:
+            deck_text += f"{card['quantity']} {card['card_name']}\n"
+    
+    context = {
+        'deck': deck,
+        'deck_text': deck_text,
+    }
+    return render(request, 'deck_builder/edit_deck.html', context)
+
+@login_required(login_url='login')
+def delete_deck(request, deck_id):
+    db = DynamoDBService()
+    deck = db.get_deck(str(request.user.id), str(deck_id))
+    
+    if request.method == 'POST':
+        db.delete_deck(str(request.user.id), str(deck_id))
+        return redirect('deck_list')
+    
+    return render(request, 'deck_builder/delete_deck.html', {'deck': deck})

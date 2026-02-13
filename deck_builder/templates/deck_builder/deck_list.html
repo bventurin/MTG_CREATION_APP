@@ -1,0 +1,43 @@
+{% extends 'deck_builder/base.html' %}
+
+{% block title %}My Decks - Magic Deck Builder{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>My Decks</h2>
+        </div>
+        <div class="col-auto">
+            <a href="{% url 'create_deck' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-2"></i>Create Deck</a>
+        </div>
+    </div>
+
+    {% if decks %}
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        {% for deck in decks %}
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">{{ deck.name }}</h5>
+                    <p class="card-text text-muted">
+                        <small>
+                            {{ deck.card_count }} cards<br>
+                            Updated: {{ deck.updated_at|date:"M d, Y" }}
+                        </small>
+                    </p>
+                </div>
+                <div class="card-footer bg-white">
+                    <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-sm btn-outline-primary w-100">View Deck</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <p class="mb-0">You don't have any decks please <a href="{% url 'create_deck' %}">create one now</a>!</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

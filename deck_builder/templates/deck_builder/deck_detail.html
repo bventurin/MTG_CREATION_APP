@@ -1,0 +1,100 @@
+{% extends 'deck_builder/base.html' %}
+
+{% block title %}{{ deck.name }} - Magic Deck Builder{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>{{ deck.name }}</h2>
+            <p class="text-muted">
+                <small>Created: {{ deck.created_at|date:"M d, Y H:i" }}</small>
+            </p>
+        </div>
+        <div class="col-auto">
+            <div class="btn-group" role="group">
+                <a href="{% url 'edit_deck' deck.deck_id %}" class="btn btn-outline-primary"><i class="bi bi-pencil me-2"></i>Edit</a>
+                <a href="{% url 'deck_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Main Deck -->
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Main Deck <span class="badge bg-primary">{{ main_deck_count }} cards</span></h5>
+                </div>
+                <div class="card-body">
+                    {% if main_deck %}
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Qty</th>
+                                <th>Card Name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for card in main_deck %}
+                            <tr>
+                                <td class="fw-bold">{{ card.quantity }}x</td>
+                                <td>{{ card.card_name }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-muted">No cards in main deck</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Sideboard -->
+            {% if sideboard %}
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Sideboard <span class="badge bg-secondary">{{ sideboard_count }} cards</span></h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Qty</th>
+                                <th>Card Name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for card in sideboard %}
+                            <tr>
+                                <td class="fw-bold">{{ card.quantity }}x</td>
+                                <td>{{ card.card_name }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6>Deck Stats</h6>
+                    <dl class="row">
+                        <dt class="col-6">Total Cards:</dt>
+                        <dd class="col-6"><strong>{{ main_deck_count }}</strong></dd>
+                        
+                        {% if sideboard_count > 0 %}
+                        <dt class="col-6">Sideboard:</dt>
+                        <dd class="col-6"><strong>{{ sideboard_count }}</strong></dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
