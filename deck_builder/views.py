@@ -214,4 +214,4 @@ def get_recommendations(request, deck_id):
         'deck': deck,
         'recommendations': recommendations,
     }
-    return render(request, 'deck_builder/recommendations.html', context)
+    return render(request, 'card_recommender/recommendations.html', context)

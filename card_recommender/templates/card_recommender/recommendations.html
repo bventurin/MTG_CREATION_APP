@@ -1,135 +1,87 @@
 {% extends 'deck_builder/base.html' %}
-{% load static %}
 
-{% block title %}Deck Recommender{% endblock %}
+{% block title %}AI Recommendations - {{ deck.name }} - Magic Deck Builder{% endblock %}
 
 {% block content %}
-<link rel="stylesheet" href="{% static 'css/style.css' %}">
 <div class="container py-5">
-    <section class="py-5 text-center">
-        <div class="row py-lg-5">
-            <div class="col-lg-6 col-md-8 mx-auto">
-                <h1 class="fw-light mb-4">Deck Recommender</h1>
-                <p class="lead text-muted mb-5">Pick a format and the colors to get a card recommendations.</p>
-                <div class="d-flex justify-content-center mb-4">
-                    <a href="/" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back to Home</a>
-                </div>
-
-                <form method="POST" class="mt-4">
-                    {% csrf_token %}
-
-                    <div class="mb-4">
-                        <label for="format" class="form-label fw-bold">Format</label>
-                        <select name="format" id="format" class="form-select w-50 mx-auto">
-                            <option value="standard">Standard</option>
-                            <option value="modern">Pre-Modern</option>
-                            <option value="commander">Commander</option>
-
-                        </select>
-                    </div>
-
-                    <div class="d-flex justify-content-center gap-4 mt-4 mb-5">
-                        <div class="form-check p-0">
-                            <input type="checkbox" class="btn-check" name="colors" value="W" id="id_colors_w"
-                                autocomplete="off">
-                            <label class="btn p-0 border-0" for="id_colors_w" title="White">
-                                <i class="ms ms-w ms-cost ms-shadow mana-icon-hover display-4"></i>
-                            </label>
-                        </div>
-                        <div class="form-check p-0">
-                            <input type="checkbox" class="btn-check" name="colors" value="U" id="id_colors_u"
-                                autocomplete="off">
-                            <label class="btn p-0 border-0" for="id_colors_u" title="Blue">
-                                <i class="ms ms-u ms-cost ms-shadow mana-icon-hover display-4"></i>
-                            </label>
-                        </div>
-                        <div class="form-check p-0">
-                            <input type="checkbox" class="btn-check" name="colors" value="B" id="id_colors_b"
-                                autocomplete="off">
-                            <label class="btn p-0 border-0" for="id_colors_b" title="Black">
-                                <i class="ms ms-b ms-cost ms-shadow mana-icon-hover display-4"></i>
-                            </label>
-                        </div>
-                        <div class="form-check p-0">
-                            <input type="checkbox" class="btn-check" name="colors" value="R" id="id_colors_r"
-                                autocomplete="off">
-                            <label class="btn p-0 border-0" for="id_colors_r" title="Red">
-                                <i class="ms ms-r ms-cost ms-shadow mana-icon-hover display-4"></i>
-                            </label>
-                        </div>
-                        <div class="form-check p-0">
-                            <input type="checkbox" class="btn-check" name="colors" value="G" id="id_colors_g"
-                                autocomplete="off">
-                            <label class="btn p-0 border-0" for="id_colors_g" title="Green">
-                                <i class="ms ms-g ms-cost ms-shadow mana-icon-hover display-4"></i>
-                            </label>
-                        </div>
-                        <div class="form-check p-0">
-                            <input type="checkbox" class="btn-check" name="colors" value="C" id="id_colors_c"
-                                autocomplete="off">
-                            <label class="btn p-0 border-0" for="id_colors_c" title="Colorless">
-                                <i class="ms ms-c ms-cost ms-shadow mana-icon-hover display-4"></i>
-                            </label>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-search me-2"></i>Get
-                        Recommendations</button>
-                </form>
-            </div>
+    <div class="row mb-4">
+        <div class="col">
+            <h2>AI Card Recommendations</h2>
+            <p class="text-muted">For: <strong>{{ deck.name }}</strong></p>
         </div>
-    </section>
-
-    {% if recommendations %}
-    <div class="py-5">
-        <h3 class="text-center mb-4 fw-light">Recommended Decks</h3>
-        <p class="text-center text-muted mb-4">Based on your format and colors.</p>
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 justify-content-center">
-            {% for deck in recommendations %}
-            <div class="col">
-                <div class="card h-100 shadow-sm border-0 bg-light">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ deck.title }}</h5>
-                        {% if deck.theme %}
-                        <p class="badge bg-primary mb-2">{{ deck.theme }}</p>
-                        {% endif %}
-                        {% if deck.commander %}
-                        <p class="small mb-2"><strong>Commander:</strong> {{ deck.commander }}</p>
-                        {% if deck.commander_image_url %}
-                        <div class="mb-3 text-center">
-                            <img src="{{ deck.commander_image_url }}" alt="{{ deck.commander }}"
-                                class="rounded shadow-sm deck-card-img"
-                                style="max-width: 100%; width: 200px; aspect-ratio: 2.5/3.5; object-fit: cover;">
-                        </div>
-                        {% endif %}
-                        {% endif %}
-                        <p class="card-text small text-muted">{{ deck.description }}</p>
-                        {% if deck.key_cards_with_images %}
-                        <p class="small mb-2"><strong>Key cards:</strong></p>
-                        <div class="d-flex flex-wrap gap-2 justify-content-center">
-                            {% for item in deck.key_cards_with_images %}
-                            <div class="text-center">
-                                {% if item.image_url %}
-                                <img src="{{ item.image_url }}" alt="{{ item.name }}" title="{{ item.name }}"
-                                    class="rounded shadow-sm key-card-img"
-                                    style="width: 80px; height: auto; aspect-ratio: 2.5/3.5; object-fit: cover;">
-                                {% else %}
-                                <span class="small text-muted">{{ item.name }}</span>
-                                {% endif %}
-                                <p class="small mb-0 mt-1 text-muted"
-                                    style="font-size: 0.7rem; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">
-                                    {{ item.name }}</p>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        {% elif deck.key_cards %}
-                        <p class="small mb-0"><strong>Key cards:</strong> {{ deck.key_cards|join:", " }}</p>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
+        <div class="col-auto">
+            <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back to Deck</a>
         </div>
     </div>
+
+    {% if recommendations %}
+    <form method="post" class="row">
+        {% csrf_token %}
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">
+                        <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+                        Suggested Cards to Improve Your Deck
+                    </h5>
+                    
+                    <p class="text-muted mb-4">
+                        Based on your current deck composition, our AI recommends these cards to enhance synergy and strengthen your strategy.
+                    </p>
+                    
+                    <div class="list-group">
+                        {% for card in recommendations %}
+                        <div class="list-group-item">
+                            <div class="form-check d-flex align-items-center">
+                                <input class="form-check-input me-3" type="checkbox" name="cards" value="{{ card }}" id="card_{{ forloop.counter }}">
+                                <label class="form-check-label flex-grow-1 mb-0" for="card_{{ forloop.counter }}">
+                                    {{ card }}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-success me-2">
+                            <i class="bi bi-plus-circle me-2"></i>Add Selected to Deck
+                        </button>
+                        <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-outline-secondary">
+                            Skip
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card border-info">
+                <div class="card-body">
+                    <h6 class="card-title">How it works</h6>
+                    <ul class="list-unstyled small text-muted">
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Select cards to add
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Click "Add Selected to Deck"
+                        </li>
+                        <li>
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Cards added with quantity 1
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </form>
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <strong>No recommendations available.</strong> Make sure your deck has cards and try again.
+    </div>
+    <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-primary">Back to Deck</a>
     {% endif %}
 </div>
 {% endblock %}
