@@ -3,31 +3,27 @@ from .services.ai_recommender import get_deck_recommendations
 from .services.scryfall import ScryfallService
 
 
-def _image_url_for_card_name(name):
-    """Return image URL from Scryfall for a card name, or None."""
+def _get_card_data(name):
+    """Return card details from Scryfall for a card name, or None."""
     if not name or not name.strip():
         return None
     card = ScryfallService.get_card_by_name(name.strip())
     if not card:
         return None
+    
     uris = card.get("image_uris") or {}
-    return uris.get("normal") or uris.get("small") or uris.get("large")
+    image_url = uris.get("normal") or uris.get("large") or uris.get("small")
+    
+    # Handle double-faced cards if root image_uris is missing
+    if not image_url and "card_faces" in card:
+        image_url = card["card_faces"][0].get("image_uris", {}).get("normal")
 
-
-def _enrich_deck_with_images(deck, max_key_cards=6):
-    """Add commander_image_url and key_cards_with_images to a deck dict."""
-    deck = dict(deck)
-    deck["commander_image_url"] = None
-    deck["key_cards_with_images"] = []
-
-    if deck.get("commander"):
-        deck["commander_image_url"] = _image_url_for_card_name(deck["commander"])
-
-    for name in (deck.get("key_cards") or [])[:max_key_cards]:
-        url = _image_url_for_card_name(name)
-        deck["key_cards_with_images"].append({"name": name, "image_url": url})
-
-    return deck
+    return {
+        "name": card.get("name"),
+        "image_url": image_url,
+        "type_line": card.get("type_line"),
+        "oracle_text": card.get("oracle_text", ""),
+    }
 
 
 def recommendations(request):
@@ -35,6 +31,19 @@ def recommendations(request):
     if request.method == "POST":
         format_name = request.POST.get("format")
         colors = request.POST.getlist("colors")
-        recs = get_deck_recommendations(format_name, colors)
-        recs = [_enrich_deck_with_images(d) for d in recs]
+        card_names = get_deck_recommendations(format_name, colors)
+        
+        for name in card_names:
+            data = _get_card_data(name)
+            if data:
+                # Structure as a 'deck' object for the template
+                recs.append({
+                    "title": data["name"],
+                    "theme": data["type_line"],  # Show type as theme
+                    "commander": None,           # No specific commander needed for single card
+                    "commander_image_url": data["image_url"], # Use main image slot
+                    "description": data["oracle_text"],
+                    "key_cards": []
+                })
+            
     return render(request, "card_recommender/recommendations.html", {"recommendations": recs})

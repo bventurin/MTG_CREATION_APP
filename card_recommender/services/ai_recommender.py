@@ -1,144 +1,126 @@
 import os
 import json
-import re
 from google import genai
 from google.genai import types
-from .scryfall import ScryfallService
 
 
-# Map WUBRG to full names for prompts
 COLOR_NAMES = {"W": "White", "U": "Blue", "B": "Black", "R": "Red", "G": "Green"}
 
 
 class DeckRecommendationAgent:
     """
     Agent that recommends decks based on the format (e.g. Commander) and colors
-    the user picks. Uses Gemini to suggest deck themes, commanders, and key cards.
+    the user picks.
     """
 
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        self._client = genai.Client(api_key=api_key) if api_key else None
-        self._model = "gemini-2.0-flash"
+        if not api_key:
+            self._client = None
+            return
+
+        self._client = genai.Client(api_key=api_key)
+        self._cache = {}
 
     def get_deck_recommendations(self, format_name, colors):
         """
-        Recommend decks based on format and selected colors.
-
-        :param format_name: str, e.g. 'commander', 'standard', 'modern'
-        :param colors: list of str, e.g. ['W', 'U', 'B', 'R', 'G']
-        :return: list of dicts with keys: title, description, commander (optional), key_cards, theme
+        Recommend cards based on format and selected colors.
+        Returns a list of card names.
         """
         if not self._client:
-            return self._fallback_recommendations(format_name, colors)
+            print("DeckRecommendationAgent: No API client (check GEMINI_API_KEY).")
+            return []
 
-        format_name = (format_name or "commander").strip().lower()
-        colors = [c.upper() for c in colors] if colors else []
+        format_name = format_name or "standard"
+        colors = colors or []
         color_str = ", ".join(COLOR_NAMES.get(c, c) for c in colors) or "any"
 
-        # For Commander, fetch real commander options from Scryfall to ground the agent
-        commander_context = ""
-        if format_name == "commander" and colors:
-            commanders = ScryfallService.get_commanders_for_colors(colors)
-            if commanders:
-                names = [c.get("name") for c in commanders if c.get("name")]
-                commander_context = (
-                    "\n\nPopular commanders in these colors (use these when relevant): "
-                    + ", ".join(names[:12])
-                )
+        # Check cache to avoid repeated API calls
+        cache_key = (format_name, tuple(sorted(colors)))
+        if cache_key in self._cache:
+            return self._cache[cache_key]
 
-        system_instruction = (
-            "You are an expert Magic: The Gathering deck advisor. "
-            "Given a format and color choice, recommend 2–3 distinct deck ideas. "
-            "For Commander, always suggest a specific commander and a short theme (e.g. tokens, spellslinger, reanimator). "
-            "For other formats, suggest an archetype and a few key card names. "
-            "Reply with valid JSON only, no markdown or extra text. Use this exact structure:\n"
-            '{"recommendations": [{"title": "...", "theme": "...", "description": "...", "commander": "..." or null, "key_cards": ["...", "..."]}]}'
+        prompt = (
+            f"Recommend 3 MTG cards for {format_name} format, {color_str} colors. "
+            "Current meta, affordable, legal cards only. "
+            "Return ONLY raw JSON, no markdown formatting, no conversational text. "
+            "JSON format: {\"cards\": [\"Card Name\", ...]}"
         )
 
-        user_prompt = (
-            f"Format: {format_name}. Colors: {color_str}.{commander_context}\n"
-            "Give 2–3 deck recommendations as JSON (recommendations array with title, theme, description, commander if Commander, key_cards list)."
+        generation_config = types.GenerateContentConfig(
+            temperature=0.3,
+            max_output_tokens=8192,
+            response_mime_type="application/json",
+            response_schema={
+                "type": "object",
+                "properties": {
+                    "cards": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    }
+                },
+                "required": ["cards"]
+            }
         )
 
         try:
             response = self._client.models.generate_content(
-                model=self._model,
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.4,
-                    max_output_tokens=1024,
-                ),
+                model="gemini-2.5-flash", 
+                contents=prompt,
+                config=generation_config
             )
-            text = (response.text or "").strip()
-            return self._parse_recommendations(text, format_name)
+            
+            # Get text from response
+            response_text = None
+            if hasattr(response, 'text') and response.text:
+                response_text = response.text
+            elif hasattr(response, 'candidates') and response.candidates:
+                response_text = response.candidates[0].content.parts[0].text
+            
+            if not response_text:
+                print("DeckRecommendationAgent: Empty response from API")
+                return []
+            
+            cards = self._parse_recommendations(response_text)
+            if cards:
+                self._cache[cache_key] = cards
+            return cards
         except Exception as e:
-            print(f"DeckRecommendationAgent Gemini error: {e}")
-            return self._fallback_recommendations(format_name, colors)
+            print(f"DeckRecommendationAgent: AI generation failed. Error: {e}")
+            return []
 
-    def _parse_recommendations(self, text, format_name):
-        """Parse JSON from model output; fall back to empty or simple list on error."""
-        # Remove markdown code fences if present
-        if "```" in text:
-            text = re.sub(r"```(?:json)?\s*", "", text)
-            text = re.sub(r"```\s*$", "", text)
-        text = text.strip()
+    def _parse_recommendations(self, text):
+        """
+        Parse JSON from model output, which may be wrapped in markdown or have a preamble.
+        """
         try:
-            data = json.loads(text)
-            recs = data.get("recommendations", data if isinstance(data, list) else [])
-            if isinstance(recs, list):
-                return [self._normalize_deck_rec(r, format_name) for r in recs]
-        except json.JSONDecodeError:
-            pass
-        return self._fallback_recommendations(format_name, [])
+            # Strip markdown code blocks if present
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0].strip()
 
-    def _normalize_deck_rec(self, r, format_name):
-        """Ensure each recommendation has title, theme, description, commander, key_cards."""
-        if not isinstance(r, dict):
-            r = {}
-        return {
-            "title": r.get("title") or "Deck idea",
-            "theme": r.get("theme") or "",
-            "description": r.get("description") or "",
-            "commander": r.get("commander") if format_name == "commander" else None,
-            "key_cards": isinstance(r.get("key_cards"), list)
-            and r["key_cards"]
-            or [],
-        }
+            # Find the start of the JSON content
+            start_index = text.find('{')
+            if start_index == -1:
+                # If no '{' found, there's no JSON object.
+                print(f"DeckRecommendationAgent: No JSON object found. Text: {text[:100]}...")
+                return []
+            
+            # Find the matching '}' for the found '{'
+            end_index = text.rfind('}')
+            if end_index == -1:
+                print(f"DeckRecommendationAgent: No closing '}}' for JSON object. Text: {text[:100]}...")
+                return []
+            
+            json_text = text[start_index : end_index + 1]
+            data = json.loads(json_text)
+            return data.get("cards", [])
+        except json.JSONDecodeError as e:
+            print(f"DeckRecommendationAgent: JSON parse error. Text: {json_text[:100]}...")
+            return []
 
-    def _fallback_recommendations(self, format_name, colors):
-        """When API is missing or fails, return Scryfall-based suggestions."""
-        format_name = (format_name or "commander").strip().lower()
-        recs = []
-
-        if format_name == "commander" and colors:
-            commanders = ScryfallService.get_commanders_for_colors(colors)
-            for c in commanders[:3]:
-                name = c.get("name")
-                if name:
-                    recs.append({
-                        "title": name,
-                        "theme": "Commander",
-                        "description": (c.get("oracle_text") or "")[:200],
-                        "commander": name,
-                        "key_cards": [],
-                    })
-
-        if not recs:
-            color_str = ", ".join(COLOR_NAMES.get(c.upper(), c) for c in colors) or "multi"
-            recs.append({
-                "title": f"{color_str} {format_name} deck",
-                "theme": "General",
-                "description": f"Build a {format_name} deck with {color_str} colors. Add GEMINI_API_KEY to .env for AI suggestions.",
-                "commander": None,
-                "key_cards": [],
-            })
-
-        return recs
-
-
-# Convenience: keep a single agent instance and a function compatible with existing views
+# keep a single agent instance and a function compatible with existing views
 _agent = None
 
 
