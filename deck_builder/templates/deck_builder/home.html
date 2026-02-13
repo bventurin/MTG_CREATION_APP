@@ -43,68 +43,32 @@
 
     <!--  Only visible if the user is login -->
     {% if user.is_authenticated %}
+    {% if decks %}
     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
-        <!-- Card 1 -->
+        {% for deck in decks %}
         <div class="col">
-            <div class="card h-100 shadow-sm border-0 bg-light">
-                <div class="card-body p-5 d-flex flex-column align-items-center justify-content-center text-center">
-                    <i class="bi bi-file-earmark-text display-4 mb-3 text-secondary"></i>
-                    <h5 class="card-title">Deck 1</h5>
-                    <p class="card-text">This is a text-only card with a white/light background.</p>
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">{{ deck.name }}</h5>
+                    <p class="card-text text-muted">
+                        <small>
+                            <i class="bi bi-collection me-1"></i>{{ deck.card_count }} cards<br>
+                            <i class="bi bi-calendar me-1"></i>{{ deck.created_at|date:"M d, Y" }}
+                        </small>
+                    </p>
+                </div>
+                <div class="card-footer bg-white">
+                    <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-sm btn-outline-primary w-100">View Deck</a>
                 </div>
             </div>
         </div>
-        <!-- Card 2 -->
-        <div class="col">
-            <div class="card h-100 shadow-sm border-0 bg-light">
-                <div class="card-body p-5 d-flex flex-column align-items-center justify-content-center text-center">
-                    <i class="bi bi-gear display-4 mb-3 text-secondary"></i>
-                    <h5 class="card-title">Deck 2</h5>
-                    <p class="card-text">Some description about the feature or content here.</p>
-                </div>
-            </div>
-        </div>
-        <!-- Card 3 -->
-        <div class="col">
-            <div class="card h-100 shadow-sm border-0 bg-light">
-                <div class="card-body p-5 d-flex flex-column align-items-center justify-content-center text-center">
-                    <i class="bi bi-graph-up display-4 mb-3 text-secondary"></i>
-                    <h5 class="card-title">Deck 3</h5>
-                    <p class="card-text">Another card example without any images.</p>
-                </div>
-            </div>
-        </div>
-        <!-- Card 4 -->
-        <div class="col">
-            <div class="card h-100 shadow-sm border-0 bg-light">
-                <div class="card-body p-5 d-flex flex-column align-items-center justify-content-center text-center">
-                    <i class="bi bi-people display-4 mb-3 text-secondary"></i>
-                    <h5 class="card-title">Deck 4</h5>
-                    <p class="card-text">User interactions or community features go here.</p>
-                </div>
-            </div>
-        </div>
-        <!-- Card 5 -->
-        <div class="col">
-            <div class="card h-100 shadow-sm border-0 bg-light">
-                <div class="card-body p-5 d-flex flex-column align-items-center justify-content-center text-center">
-                    <i class="bi bi-chat-dots display-4 mb-3 text-secondary"></i>
-                    <h5 class="card-title">Deck 5</h5>
-                    <p class="card-text">Feedback and communication channels.</p>
-                </div>
-            </div>
-        </div>
-        <!-- Card 6 -->
-        <div class="col">
-            <div class="card h-100 shadow-sm border-0 bg-light">
-                <div class="card-body p-5 d-flex flex-column align-items-center justify-content-center text-center">
-                    <i class="bi bi-shield-check display-4 mb-3 text-secondary"></i>
-                    <h5 class="card-title">Deck 6</h5>
-                    <p class="card-text">Security and reliability information.</p>
-                </div>
-            </div>
-        </div>
+        {% endfor %}
     </div>
+    {% else %}
+    <div class="alert alert-info">
+        <p class="mb-0">You don't have any decks yet. <a href="{% url 'create_deck' %}">Create one now</a>!</p>
+    </div>
+    {% endif %}
     {% else %}
     <div class="text-center py-5">
         <p class="lead">To see your decks please <a href="{% url 'login' %}">log in</a>.</p>

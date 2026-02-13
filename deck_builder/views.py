@@ -7,7 +7,17 @@ import re
 # Create your views here.
 
 def home(request):
-    return render(request, 'deck_builder/home.html')
+    decks = []
+    if request.user.is_authenticated:
+        db = DynamoDBService()
+        decks = db.get_user_decks(str(request.user.id))
+        
+        # Add card count for each deck
+        for deck in decks:
+            cards = db.get_deck_cards(deck['deck_id'])
+            deck['card_count'] = sum(c['quantity'] for c in cards)
+    
+    return render(request, 'deck_builder/home.html', {'decks': decks})
 
 @login_required(login_url='login')
 def create_deck(request):
