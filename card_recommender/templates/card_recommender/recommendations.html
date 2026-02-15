@@ -1,9 +1,10 @@
 {% extends 'deck_builder/base.html' %}
+{% load deck_builder_filters %}
 
 {% block title %}AI Recommendations - {{ deck.name }} - Magic Deck Builder{% endblock %}
 
 {% block content %}
-<div class="container py-5">
+<div class="container-lg py-5">
     <div class="row mb-4">
         <div class="col">
             <h2>AI Card Recommendations</h2>
@@ -15,65 +16,57 @@
     </div>
 
     {% if recommendations %}
-    <form method="post" class="row">
+    <form method="post">
         {% csrf_token %}
-        <div class="col-lg-8">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title mb-4">
-                        <i class="bi bi-lightbulb-fill text-warning me-2"></i>
-                        Suggested Cards to Improve Your Deck
-                    </h5>
-                    
-                    <p class="text-muted mb-4">
-                        Based on your current deck composition, our AI recommends these cards to enhance synergy and strengthen your strategy.
-                    </p>
-                    
-                    <div class="list-group">
-                        {% for card in recommendations %}
-                        <div class="list-group-item">
-                            <div class="form-check d-flex align-items-center">
-                                <input class="form-check-input me-3" type="checkbox" name="cards" value="{{ card }}" id="card_{{ forloop.counter }}">
-                                <label class="form-check-label flex-grow-1 mb-0" for="card_{{ forloop.counter }}">
-                                    {{ card }}
-                                </label>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    
-                    <div class="mt-4">
-                        <button type="submit" class="btn btn-success me-2">
-                            <i class="bi bi-plus-circle me-2"></i>Add Selected to Deck
-                        </button>
-                        <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-outline-secondary">
-                            Skip
-                        </a>
-                    </div>
-                </div>
-            </div>
+        
+        <div class="mb-4">
+            <p class="text-muted">
+                Based on your current deck composition, our AI recommends these cards to enhance synergy and strengthen your strategy.
+            </p>
         </div>
         
-        <div class="col-lg-4">
-            <div class="card border-info">
-                <div class="card-body">
-                    <h6 class="card-title">How it works</h6>
-                    <ul class="list-unstyled small text-muted">
-                        <li class="mb-2">
-                            <i class="bi bi-check-circle text-success me-2"></i>
-                            Select cards to add
-                        </li>
-                        <li class="mb-2">
-                            <i class="bi bi-check-circle text-success me-2"></i>
-                            Click "Add Selected to Deck"
-                        </li>
-                        <li>
-                            <i class="bi bi-check-circle text-success me-2"></i>
-                            Cards added with quantity 1
-                        </li>
-                    </ul>
-                </div>
-            </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover deck-detail-table">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 30px;"></th>
+                        <th style="width: 220px;">Card Name</th>
+                        <th style="width: 120px;" class="text-end">Mana</th>
+                        <th style="width: 80px;" class="text-end">Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for card in recommendations %}
+                    <tr class="card-row" data-image="{{ card.image_url }}">
+                        <td>
+                            <input class="form-check-input" type="checkbox" name="cards" value="{{ card.name }}" id="card_{{ forloop.counter }}">
+                        </td>
+                        <td>
+                            <label class="form-check-label" for="card_{{ forloop.counter }}">
+                                <span class="card-name-hover">{{ card.name }}</span>
+                            </label>
+                        </td>
+                        <td class="text-end">{{ card.mana_cost|mana_icons|mark_safe_mana }}</td>
+                        <td class="text-end">
+                            {% if card.price %}
+                                ${{ card.price|floatformat:2 }}
+                            {% else %}
+                                $0.00
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-plus-circle me-2"></i>Add Selected to Deck
+            </button>
+            <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-outline-secondary">
+                Skip
+            </a>
         </div>
     </form>
     {% else %}
@@ -84,4 +77,38 @@
     <a href="{% url 'deck_detail' deck.deck_id %}" class="btn btn-primary">Back to Deck</a>
     {% endif %}
 </div>
+
+<!-- Card Image Tooltip -->
+<div id="card-image-tooltip" class="card-tooltip">
+    <img id="tooltip-image" src="" alt="Card">
+</div>
+
+<script>
+document.querySelectorAll('.card-name-hover').forEach(cardName => {
+    cardName.addEventListener('mouseenter', function(e) {
+        const row = cardName.closest('.card-row');
+        const imageUrl = row.dataset.image;
+        if (!imageUrl) return;
+        
+        const tooltip = document.getElementById('card-image-tooltip');
+        const img = document.getElementById('tooltip-image');
+        img.src = imageUrl;
+        tooltip.style.display = 'block';
+        
+        // Position tooltip near cursor
+        const updatePosition = (e) => {
+            tooltip.style.left = (e.clientX + 15) + 'px';
+            tooltip.style.top = (e.clientY + 15) + 'px';
+        };
+        
+        updatePosition(e);
+        cardName.addEventListener('mousemove', updatePosition);
+        
+        cardName.addEventListener('mouseleave', function() {
+            tooltip.style.display = 'none';
+            cardName.removeEventListener('mousemove', updatePosition);
+        }, { once: true });
+    });
+});
+</script>
 {% endblock %}

@@ -20,6 +20,34 @@ s3_client = boto3.client(
 )
 
 
+@lru_cache(maxsize=1)
+def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
+    """
+    Cached function to fetch all cards from S3 (only loads once per bucket/type combo).
+    """
+    try:
+        data_key = f"scryfall/{bulk_type}/latest.json"
+        logger.info(f"Loading cards from S3: s3://{bucket_name}/{data_key}")
+        
+        response = s3_client.get_object(Bucket=bucket_name, Key=data_key)
+        content = response['Body'].read()
+        
+        # Check if content is gzipped
+        if content[:2] == b'\x1f\x8b':  # gzip magic number
+            content = gzip.decompress(content)
+        
+        cards = json.loads(content)
+        logger.info(f"Successfully loaded {len(cards)} cards from S3")
+        return cards
+        
+    except s3_client.exceptions.NoSuchKey:
+        logger.error(f"Card data not found at s3://{bucket_name}/scryfall/{bulk_type}/latest.json")
+        return []
+    except Exception as e:
+        logger.error(f"Error fetching cards from S3: {str(e)}")
+        return []
+
+
 class ScryfallS3Service:
     """Service to interact with Scryfall card data stored in S3."""
     
@@ -49,35 +77,12 @@ class ScryfallS3Service:
     def get_all_cards(self) -> List[Dict]:
         """
         Fetch all cards from the latest bulk data file in S3.
+        Uses LRU cache for performance.
         
         Returns:
             List of card objects
         """
-        try:
-            # Fetch from the S3 location where Lambda stores the data
-            data_key = f"scryfall/{self.bulk_type}/latest.json"
-            logger.info(f"Fetching cards from S3: s3://{self.bucket_name}/{data_key}")
-            
-            # Download the file
-            response = s3_client.get_object(Bucket=self.bucket_name, Key=data_key)
-            content = response['Body'].read()
-            
-            # Check if content is gzipped
-            if content[:2] == b'\x1f\x8b':  # gzip magic number
-                content = gzip.decompress(content)
-            
-            cards = json.loads(content)
-            
-            logger.info(f"Successfully loaded {len(cards)} cards from S3")
-            return cards
-            
-        except s3_client.exceptions.NoSuchKey:
-            logger.error(f"Card data not found at s3://{self.bucket_name}/scryfall/{self.bulk_type}/latest.json")
-            logger.info("Lambda will populate this data on its weekly sync")
-            return []
-        except Exception as e:
-            logger.error(f"Error fetching cards from S3: {str(e)}")
-            return []
+        return _get_all_cards_cached(self.bucket_name, self.bulk_type)
     
     def search_cards(self, query: str) -> List[Dict]:
         """

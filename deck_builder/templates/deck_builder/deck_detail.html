@@ -1,14 +1,15 @@
 {% extends 'deck_builder/base.html' %}
+{% load deck_builder_filters %}
 
 {% block title %}{{ deck.name }} - Magic Deck Builder{% endblock %}
 
 {% block content %}
-<div class="container py-5">
+<div class="container-lg py-5">
     <div class="row mb-4">
         <div class="col">
             <h2>{{ deck.name }}</h2>
             <p class="text-muted">
-                <small>Created: {{ deck.created_at|date:"M d, Y H:i" }}</small>
+                <small>Created: {{ deck.created_at|date:"M d, Y H:i" }} • <strong>{{ main_deck_count }}</strong> main • <strong>{{ sideboard_count }}</strong> sideboard</small>
             </p>
         </div>
         <div class="col-auto">
@@ -20,82 +21,278 @@
         </div>
     </div>
 
-    <div class="row">
-        <!-- Main Deck -->
-        <div class="col-lg-8">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">Main Deck <span class="badge bg-primary">{{ main_deck_count }} cards</span></h5>
-                </div>
-                <div class="card-body">
-                    {% if main_deck %}
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Qty</th>
-                                <th>Card Name</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for card in main_deck %}
-                            <tr>
-                                <td class="fw-bold">{{ card.quantity }}x</td>
-                                <td>{{ card.card_name }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                    {% else %}
-                    <p class="text-muted">No cards in main deck</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Sideboard -->
-            {% if sideboard %}
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Sideboard <span class="badge bg-secondary">{{ sideboard_count }} cards</span></h5>
-                </div>
-                <div class="card-body">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Qty</th>
-                                <th>Card Name</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for card in sideboard %}
-                            <tr>
-                                <td class="fw-bold">{{ card.quantity }}x</td>
-                                <td>{{ card.card_name }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-
-        <!-- Sidebar -->
-        <div class="col-lg-4">
-            <div class="card">
-                <div class="card-body">
-                    <h6>Deck Stats</h6>
-                    <dl class="row">
-                        <dt class="col-6">Total Cards:</dt>
-                        <dd class="col-6"><strong>{{ main_deck_count }}</strong></dd>
-                        
-                        {% if sideboard_count > 0 %}
-                        <dt class="col-6">Sideboard:</dt>
-                        <dd class="col-6"><strong>{{ sideboard_count }}</strong></dd>
+    <!-- Main Deck -->
+    <div class="mb-5">
+        <h4 class="mb-3"><span class="badge bg-primary">{{ main_deck_count }} cards</span> Main Deck</h4>
+        
+        {% for type_category, cards in main_deck_organized.items %}
+        <div class="mb-4">
+            <h6 class="text-muted text-uppercase mb-3"><small>{{ type_category }} ({{ cards|length }})</small></h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover deck-detail-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px;">Qty</th>
+                            <th style="width: 220px;">Card Name</th>
+                            <th style="width: 120px;" class="text-end">Mana</th>
+                            <th style="width: 80px;" class="text-end">Price</th>
+                            <th style="width: 80px;" class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for card in cards %}
+                        <tr class="card-row {% if card.type_line|stringformat:'s'|slice:':8' == '(Not found' %}missing-data{% endif %}" data-image="{{ card.image_url }}">
+                            <td class="fw-bold">{{ card.quantity }}x</td>
+                            <td>
+                                <span class="card-name-hover">{{ card.card_name }}</span>
+                            </td>
+                            <td class="text-end">{{ card.mana_cost|mana_icons|mark_safe_mana }}</td>
+                            <td class="text-end">
+                                {% if card.price %}
+                                    ${{ card.price|floatformat:2 }}
+                                {% else %}
+                                    $0.00
+                                {% endif %}
+                            </td>
+                            <td class="text-end fw-bold">
+                                {% if card.price %}
+                                    ${{ card.price|mul:card.quantity|floatformat:2 }}
+                                {% else %}
+                                    $0.00
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if card.type_line|stringformat:'s'|slice:':8' == '(Not found' %}
+                        <tr class="text-muted missing-data-note">
+                            <td colspan="5"><small>{{ card.type_line }}</small></td>
+                        </tr>
                         {% endif %}
-                    </dl>
-                </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Sideboard -->
+    {% if sideboard_flat %}
+    <div class="mb-5">
+        <h4 class="mb-3"><span class="badge bg-secondary">{{ sideboard_count }} cards</span> Sideboard</h4>
+        
+        <div class="table-responsive">
+            <table class="table table-sm table-hover deck-detail-table">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 50px;">Qty</th>
+                        <th style="width: 220px;">Card Name</th>
+                        <th style="width: 120px;" class="text-end">Mana</th>
+                        <th style="width: 80px;" class="text-end">Price</th>
+                        <th style="width: 80px;" class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for card in sideboard_flat %}
+                    <tr class="card-row {% if card.type_line|stringformat:'s'|slice:':8' == '(Not found' %}missing-data{% endif %}" data-image="{{ card.image_url }}">
+                        <td class="fw-bold">{{ card.quantity }}x</td>
+                        <td>
+                            <span class="card-name-hover">{{ card.card_name }}</span>
+                        </td>
+                        <td class="text-end">{{ card.mana_cost|mana_icons|mark_safe_mana }}</td>
+                        <td class="text-end">
+                            {% if card.price %}
+                                ${{ card.price|floatformat:2 }}
+                            {% else %}
+                                $0.00
+                            {% endif %}
+                        </td>
+                        <td class="text-end fw-bold">
+                            {% if card.price %}
+                                ${{ card.price|mul:card.quantity|floatformat:2 }}
+                            {% else %}
+                                $0.00
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if card.type_line|stringformat:'s'|slice:':8' == '(Not found' %}
+                    <tr class="text-muted missing-data-note">
+                        <td colspan="5"><small>{{ card.type_line }}</small></td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
+    {% endif %}
 </div>
+
+<!-- Card Image Tooltip -->
+<div id="card-image-tooltip" class="card-tooltip">
+    <img id="tooltip-image" src="" alt="Card">
+</div>
+
+<script>
+document.querySelectorAll('.card-name-hover').forEach(cardName => {
+    cardName.addEventListener('mouseenter', function(e) {
+        const row = cardName.closest('.card-row');
+        const imageUrl = row.dataset.image;
+        if (!imageUrl) return;
+        
+        const tooltip = document.getElementById('card-image-tooltip');
+        const img = document.getElementById('tooltip-image');
+        img.src = imageUrl;
+        tooltip.style.display = 'block';
+        
+        // Position tooltip near cursor
+        const updatePosition = (e) => {
+            tooltip.style.left = (e.clientX + 15) + 'px';
+            tooltip.style.top = (e.clientY + 15) + 'px';
+        };
+        
+        updatePosition(e);
+        cardName.addEventListener('mousemove', updatePosition);
+        
+        cardName.addEventListener('mouseleave', function() {
+            tooltip.style.display = 'none';
+            cardName.removeEventListener('mousemove', updatePosition);
+        }, { once: true });
+    });
+});
+
+// Fetch missing card data from Scryfall API
+document.addEventListener('DOMContentLoaded', function() {
+    const missingRows = document.querySelectorAll('.card-row.missing-data');
+    
+    if (missingRows.length > 0) {
+        console.log(`Found ${missingRows.length} missing cards, fetching from Scryfall API...`);
+    }
+    
+    // Add delay between requests to respect Scryfall rate limits (10 requests per second)
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+    
+    async function fetchCardData() {
+        for (const row of missingRows) {
+            const cardNameSpan = row.querySelector('.card-name-hover');
+            if (!cardNameSpan) continue;
+            
+            const cardName = cardNameSpan.textContent.trim();
+            console.log(`Fetching: ${cardName}`);
+            
+            try {
+                let data = null;
+                
+                // Method 1: Try exact match using /cards/named endpoint
+                try {
+                    const exactResponse = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}`);
+                    if (exactResponse.ok) {
+                        data = await exactResponse.json();
+                        console.log(`✓ Found exact match: ${data.name}`);
+                    }
+                } catch (e) {
+                    console.log(`Exact match failed for ${cardName}`);
+                }
+                
+                // Method 2: Try fuzzy match using /cards/named endpoint
+                if (!data) {
+                    try {
+                        const fuzzyResponse = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`);
+                        if (fuzzyResponse.ok) {
+                            data = await fuzzyResponse.json();
+                            console.log(`✓ Found fuzzy match: ${data.name}`);
+                        }
+                    } catch (e) {
+                        console.log(`Fuzzy match failed for ${cardName}`);
+                    }
+                }
+                
+                // Method 3: Try search endpoint as last resort
+                if (!data) {
+                    try {
+                        const searchResponse = await fetch(`https://api.scryfall.com/cards/search?q=!"${encodeURIComponent(cardName)}"`);
+                        if (searchResponse.ok) {
+                            const searchData = await searchResponse.json();
+                            if (searchData.data && searchData.data.length > 0) {
+                                data = searchData.data[0]; // Take first result
+                                console.log(`✓ Found via search: ${data.name}`);
+                            }
+                        }
+                    } catch (e) {
+                        console.log(`Search failed for ${cardName}`);
+                    }
+                }
+                
+                if (!data) {
+                    console.error(`✗ Could not find ${cardName} on Scryfall`);
+                    await delay(100); // Small delay before next card
+                    continue;
+                }
+                
+                // Update card image
+                if (data.image_uris && data.image_uris.normal) {
+                    row.dataset.image = data.image_uris.normal;
+                } else if (data.card_faces && data.card_faces[0] && data.card_faces[0].image_uris) {
+                    row.dataset.image = data.card_faces[0].image_uris.normal;
+                }
+                
+                // Update mana cost
+                const manaCell = row.cells[2];
+                let manaCost = data.mana_cost || '';
+                if (!manaCost && data.card_faces && data.card_faces[0]) {
+                    manaCost = data.card_faces[0].mana_cost || '';
+                }
+                if (manaCost) {
+                    const manaHtml = manaCost.replace(/{([^}]+)}/g, (match, symbol) => {
+                        const cleanSymbol = symbol.toLowerCase().replace(/\//g, '');
+                        return `<i class="ms ms-${cleanSymbol} ms-cost ms-shadow"></i>`;
+                    });
+                    manaCell.innerHTML = `<span class="mana-cost">${manaHtml}</span>`;
+                    manaCell.classList.add('text-end');
+                }
+                
+                // Update price
+                if (data.prices && data.prices.usd) {
+                    const price = parseFloat(data.prices.usd);
+                    const qtyText = row.cells[0].textContent.trim();
+                    const qty = parseInt(qtyText);
+                    
+                    row.cells[3].textContent = `$${price.toFixed(2)}`;
+                    row.cells[3].classList.add('text-end');
+                    
+                    row.cells[4].textContent = `$${(price * qty).toFixed(2)}`;
+                    row.cells[4].classList.add('text-end', 'fw-bold');
+                } else {
+                    row.cells[3].textContent = '$0.00';
+                    row.cells[3].classList.add('text-end');
+                    row.cells[4].textContent = '$0.00';
+                    row.cells[4].classList.add('text-end', 'fw-bold');
+                }
+                
+                // Clean up UI
+                const nextRow = row.nextElementSibling;
+                if (nextRow && nextRow.classList.contains('text-muted')) {
+                    nextRow.remove();
+                }
+                
+                row.style.backgroundColor = '';
+                row.classList.remove('missing-data');
+                
+                console.log(`✓ Successfully updated ${cardName}`);
+                
+                // Delay to respect Scryfall rate limits (100ms = max 10 requests/second)
+                await delay(100);
+                
+            } catch (e) {
+                console.error(`Error fetching ${cardName}:`, e);
+                await delay(100);
+            }
+        }
+        
+        console.log('Finished fetching missing cards');
+    }
+    
+    // Start fetching
+    fetchCardData();
+});
+</script>
 {% endblock %}

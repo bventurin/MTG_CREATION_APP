@@ -40,9 +40,10 @@ class Deck(models.Model):
 
 class DeckCard(models.Model):
     deck = models.ForeignKey(Deck, on_delete=models.CASCADE, related_name='cards')
-    card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='deck_cards')
+    scryfall_id = models.UUIDField(null=True, blank=True) 
+    card_name = models.CharField(max_length=255)  
     quantity = models.PositiveIntegerField()
     is_sideboard = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.quantity}x {self.card.name}"
+        return f"{self.quantity}x {self.card_name}"

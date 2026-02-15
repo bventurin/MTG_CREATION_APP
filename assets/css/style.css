@@ -14,3 +14,132 @@
     /* Increased blur-radius for a more prominent, darker glow */
     filter: drop-shadow(0 0 8px black);
 }
+
+/* Card Image Tooltip */
+.card-tooltip {
+    position: fixed;
+    pointer-events: none;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.9);
+    padding: 8px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    display: none;
+    left: -9999px;
+    top: -9999px;
+}
+
+.card-tooltip img {
+    width: 200px;
+    border-radius: 8px;
+}
+
+/* Card Row Styles */
+.card-row {
+    transition: background-color 0.1s;
+}
+
+.card-row:hover {
+    background-color: rgba(0, 123, 255, 0.1) !important;
+}
+
+.card-row.missing-data {
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.missing-data-note {
+    background-color: rgba(255, 193, 7, 0.05);
+}
+
+.card-name-hover {
+    color: #0d6efd;
+    cursor: pointer;
+}
+
+.card-name-hover:hover {
+    text-decoration: underline;
+}
+
+/* Mana Cost Styling */
+.mana-cost {
+    display: inline-flex;
+    gap: 0;
+    align-items: center;
+    line-height: 1;
+    white-space: nowrap;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+}
+
+.mana-cost i.ms {
+    font-size: 16px !important;
+    line-height: 16px !important;
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+    margin: 0 1px;
+    vertical-align: middle;
+}
+
+.mana-cost i.ms::before {
+    display: inline-block !important;
+    font-size: 16px !important;
+}
+
+/* Deck card title - allow truncation if needed */
+.deck-card .card-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+/* Deck card header flex container */
+.deck-card .d-flex {
+    flex-wrap: nowrap !important;
+}
+
+/* Deck color identity icons */
+.deck-colors {
+    display: inline-flex;
+    gap: 2px;
+    align-items: center;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
+.deck-colors i.ms {
+    font-size: 16px !important;
+    line-height: 16px !important;
+    width: 16px;
+    height: 16px;
+}
+
+/* Mana Symbol Colors */
+.ms-w { filter: brightness(1.2); }
+.ms-u { filter: brightness(1.3); }
+.ms-b { filter: brightness(1.5); }
+.ms-r { filter: brightness(1.2); }
+.ms-g { filter: brightness(1.2); }
+
+/* Table Cell Alignment */
+.deck-detail-table td {
+    vertical-align: middle !important;
+}
+
+/* Deck Card Styles */
+.deck-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.deck-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+.deck-card-image {
+    height: 250px;
+    object-fit: cover;
+    object-position: center top;
+}

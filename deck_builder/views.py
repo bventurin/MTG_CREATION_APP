@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from .services.dynamodb_service import DynamoDBService
+from .services.card_organizer import organize_cards_by_type
 from card_recommender.services.ai_recommender import DeckRecommendationAgent
 import re
 
@@ -12,10 +13,19 @@ def home(request):
         db = DynamoDBService()
         decks = db.get_user_decks(str(request.user.id))
         
-        # Add card count for each deck
+        # Add card count, color identity, and representative card image for each deck
+        from .services.card_organizer import get_deck_metadata
+        
         for deck in decks:
             cards = db.get_deck_cards(deck['deck_id'])
             deck['card_count'] = sum(c['quantity'] for c in cards)
+            
+            # Get deck metadata (colors and representative card)
+            main_deck = [c for c in cards if not c.get('is_sideboard')]
+            metadata = get_deck_metadata(main_deck)
+            
+            deck['color_identity'] = metadata['colors']
+            deck['representative_image'] = metadata['representative_image']
     
     return render(request, 'deck_builder/home.html', {'decks': decks})
 
@@ -76,10 +86,19 @@ def deck_list(request):
     db = DynamoDBService()
     decks = db.get_user_decks(str(request.user.id))
     
-    # Add card count for each deck
+    # Add card count, color identity, and representative card image for each deck
+    from .services.card_organizer import get_deck_metadata
+    
     for deck in decks:
         cards = db.get_deck_cards(deck['deck_id'])
         deck['card_count'] = sum(c['quantity'] for c in cards)
+        
+        # Get deck metadata (colors and representative card)
+        main_deck = [c for c in cards if not c.get('is_sideboard')]
+        metadata = get_deck_metadata(main_deck)
+        
+        deck['color_identity'] = metadata['colors']
+        deck['representative_image'] = metadata['representative_image']
     
     return render(request, 'deck_builder/deck_list.html', {'decks': decks})
 
@@ -95,10 +114,19 @@ def deck_detail(request, deck_id):
     main_deck = [c for c in all_cards if not c.get('is_sideboard')]
     sideboard = [c for c in all_cards if c.get('is_sideboard')]
     
+    # Organize main deck by type
+    main_deck_organized = organize_cards_by_type(main_deck)
+    
+    # Keep sideboard as flat list
+    sideboard_list = organize_cards_by_type(sideboard)
+    sideboard_flat = []
+    for cards_list in sideboard_list.values():
+        sideboard_flat.extend(cards_list)
+    
     context = {
         'deck': deck,
-        'main_deck': sorted(main_deck, key=lambda x: x['card_name']),
-        'sideboard': sorted(sideboard, key=lambda x: x['card_name']),
+        'main_deck_organized': main_deck_organized,
+        'sideboard_flat': sideboard_flat,
         'main_deck_count': sum(c['quantity'] for c in main_deck),
         'sideboard_count': sum(c['quantity'] for c in sideboard),
     }
@@ -220,8 +248,47 @@ def get_recommendations(request, deck_id):
     agent = DeckRecommendationAgent()
     recommendations = agent.get_deck_improvement_recommendations(card_names, format_name="standard")
     
+    # Fetch card details for recommendations (use cached data)
+    from .services.scryfall_s3_service import ScryfallS3Service
+    scryfall_service = ScryfallS3Service()
+    all_cards = scryfall_service.get_all_cards()  # Cached - loads once
+    
+    # Create lookup map for fast searching
+    cards_by_name = {card.get('name', '').lower(): card for card in all_cards}
+    
+    recommendations_with_details = []
+    for card_name in recommendations:
+        card_data = cards_by_name.get(card_name.lower())
+        if card_data:
+            # Extract price
+            prices = card_data.get('prices', {})
+            usd_price = prices.get('usd')
+            try:
+                if usd_price is None or usd_price == '':
+                    usd_price = 0.0
+                else:
+                    usd_price = float(usd_price)
+            except (ValueError, TypeError):
+                usd_price = 0.0
+            
+            recommendations_with_details.append({
+                'name': card_name,
+                'type_line': card_data.get('type_line', ''),
+                'image_url': ScryfallS3Service.get_card_image_url(card_data, 'normal'),
+                'mana_cost': card_data.get('mana_cost', ''),
+                'price': usd_price,
+            })
+        else:
+            recommendations_with_details.append({
+                'name': card_name,
+                'type_line': 'Unknown',
+                'image_url': None,
+                'mana_cost': '',
+                'price': 0.0,
+            })
+    
     context = {
         'deck': deck,
-        'recommendations': recommendations,
+        'recommendations': recommendations_with_details,
     }
     return render(request, 'card_recommender/recommendations.html', context)
