@@ -14,10 +14,12 @@
         </div>
         <div class="col-auto">
             <div class="btn-group" role="group">
+                <button id="share-qr-btn" class="btn btn-info" title="Generate QR Code"><i class="bi bi-qr-code me-2"></i>Share</button>
                 <a href="{% url 'get_recommendations' deck.deck_id %}" class="btn btn-success"><i class="bi bi-lightbulb me-2"></i>Get AI Suggestions</a>
                 <a href="{% url 'edit_deck' deck.deck_id %}" class="btn btn-outline-primary"><i class="bi bi-pencil me-2"></i>Edit</a>
                 <a href="{% url 'deck_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back</a>
             </div>
+            {% csrf_token %}
         </div>
     </div>
 
@@ -278,7 +280,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 row.classList.remove('missing-data');
                 
                 console.log(`✓ Successfully updated ${cardName}`);
-                
                 // Delay to respect Scryfall rate limits (100ms = max 10 requests/second)
                 await delay(100);
                 
@@ -293,6 +294,63 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Start fetching
     fetchCardData();
+});
+
+// Share button - Generate QR code
+document.addEventListener('DOMContentLoaded', function() {
+    const shareBtn = document.getElementById('share-qr-btn');
+    if (!shareBtn) {
+        console.error('Share button not found!');
+        return;
+    }
+    
+    console.log('Share button found, attaching listener...');
+    
+    shareBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        // Add loading state
+        const originalContent = shareBtn.innerHTML;
+        shareBtn.disabled = true;
+        shareBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
+        
+        const deckId = '{{ deck.deck_id }}';
+        
+        // Get CSRF token from form
+        const csrfTokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
+        const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+        
+        const url = '/decks/' + deckId + '/qr-code/';
+        
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            mode: 'same-origin'
+        })
+        .then(function(res) {
+            console.log('Response status:', res.status);
+            return res.json();
+        })
+        .then(function(data) {
+            console.log('Response data:', data);
+            if (data.success) {
+                window.open(data.qr_code_url, '_blank');
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(function(e) {
+            console.error('Fetch error:', e);
+            alert('Error: ' + e.message);
+        })
+        .finally(function() {
+            shareBtn.disabled = false;
+            shareBtn.innerHTML = originalContent;
+        });
+    });
 });
 </script>
 {% endblock %}

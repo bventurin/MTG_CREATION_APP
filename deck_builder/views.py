@@ -1,7 +1,10 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse, HttpResponseBadRequest
+from django.views.decorators.http import require_http_methods
 from .services.dynamodb_service import DynamoDBService
 from .services.card_organizer import organize_cards_by_type
+from .services.qr_service import QRService
 from card_recommender.services.ai_recommender import DeckRecommendationAgent
 import re
 
@@ -292,3 +295,23 @@ def get_recommendations(request, deck_id):
         'recommendations': recommendations_with_details,
     }
     return render(request, 'card_recommender/recommendations.html', context)
+
+
+@require_http_methods(["POST"])
+@login_required(login_url='login')
+def generate_qr_code(request, deck_id):
+    """Generate QR code for deck sharing using external service"""
+    try:
+        # Build the deck URL
+        deck_url = request.build_absolute_uri(f'/decks/{deck_id}/')
+        
+        # Generate QR code using service
+        qr_code_url = QRService.get_qr_code_url(deck_url)
+            
+        return JsonResponse({
+            'success': True,
+            'qr_code_url': qr_code_url,
+            'deck_url': deck_url
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
