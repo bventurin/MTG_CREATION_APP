@@ -19,12 +19,27 @@ def _get_all_cards_cached():
         _scryfall_service = ScryfallS3Service()
         _cards_cache = _scryfall_service.get_all_cards()
         
-    # Build index for O(1) lookups
+        # Build index for O(1) lookups
         _cards_index = {}
         for card in _cards_cache:
             card_name = card.get('name', '').lower().strip()
             if card_name:
                 _cards_index[card_name] = card
+                # Also index front face of multiface cards (e.g. "Fire // Ice" -> index "fire")
+                if ' // ' in card_name:
+                    front_face = card_name.split(' // ')[0].strip()
+                    if front_face and front_face not in _cards_index:
+                        _cards_index[front_face] = card
+            
+            # Index printed_name (Universes Beyond / Marvel cards, e.g. "Kavaero, Mind-Bitten")
+            printed_name = card.get('printed_name', '').lower().strip()
+            if printed_name and printed_name not in _cards_index:
+                _cards_index[printed_name] = card
+            
+            # Index flavor_name (Godzilla / IP showcase cards)
+            flavor_name = card.get('flavor_name', '').lower().strip()
+            if flavor_name and flavor_name not in _cards_index:
+                _cards_index[flavor_name] = card
     
     return _cards_cache
 
@@ -109,7 +124,27 @@ def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
         card_data = _find_card_in_cache(card_name)
         
         if not card_data:
-            # If not found in cache, use placeholder
+            # Fallback: try live Scryfall API for cards not in S3 bulk data
+            import requests
+            import time
+            try:
+                resp = requests.get(
+                    f'https://api.scryfall.com/cards/named',
+                    params={'fuzzy': card_name},
+                    timeout=5
+                )
+                if resp.status_code == 200:
+                    card_data = resp.json()
+                    # Cache it for future lookups
+                    if _cards_index is not None:
+                        _cards_index[card_name.lower().strip()] = card_data
+                    logger.info(f"Fetched '{card_name}' from Scryfall API (not in S3 bulk data)")
+                    time.sleep(0.1)  # Respect rate limits
+            except Exception as e:
+                logger.warning(f"Scryfall API fallback failed for '{card_name}': {e}")
+        
+        if not card_data:
+            # If still not found, use placeholder
             logger.warning(f"Card not found in Scryfall database: {card_name}")
             category = 'Unknown'
             card_with_details = {
@@ -123,9 +158,9 @@ def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
         else:
             category = get_card_type_category(card_data.get('type_line', ''))
             
-            # Extract price (default to 0 if not available)
+            # Extract price with fallback: usd -> usd_foil -> eur
             prices = card_data.get('prices', {})
-            usd_price = prices.get('usd')
+            usd_price = prices.get('usd') or prices.get('usd_foil') or prices.get('eur')
             
             try:
                 if usd_price is None or usd_price == '':
@@ -135,11 +170,16 @@ def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
             except (ValueError, TypeError):
                 usd_price = 0.0
             
+            # Get mana_cost with card_faces fallback for multiface cards
+            mana_cost = card_data.get('mana_cost', '')
+            if not mana_cost and card_data.get('card_faces'):
+                mana_cost = card_data['card_faces'][0].get('mana_cost', '')
+            
             card_with_details = {
                 **card_info,
                 'type_line': card_data.get('type_line', ''),
                 'image_url': ScryfallS3Service.get_card_image_url(card_data, 'normal'),
-                'mana_cost': card_data.get('mana_cost', ''),
+                'mana_cost': mana_cost,
                 'oracle_text': card_data.get('oracle_text', ''),
                 'colors': card_data.get('colors', []),
                 'price': usd_price,
@@ -199,9 +239,9 @@ def get_deck_metadata(cards_data: List[Dict]) -> Dict:
         if is_land:
             continue
         
-        # Extract price
+        # Extract price with fallback
         prices = card_data.get('prices', {})
-        usd_price = prices.get('usd')
+        usd_price = prices.get('usd') or prices.get('usd_foil') or prices.get('eur') or prices.get('tix')
         try:
             card_price = float(usd_price) if usd_price else 0.0
         except (ValueError, TypeError):

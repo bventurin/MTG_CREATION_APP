@@ -142,7 +142,7 @@ def deck_detail(request, deck_id):
         card_data = scryfall_service.get_card_by_name(card_name)
         if card_data:
             prices = card_data.get('prices', {})
-            usd = prices.get('usd')
+            usd = prices.get('usd') or prices.get('usd_foil') or prices.get('eur')
             if usd:
                 return Decimal(usd)
         return Decimal('0.00')

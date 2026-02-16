@@ -110,19 +110,51 @@ class ScryfallS3Service:
         return results
     
     def get_card_by_name(self, name: str) -> Optional[Dict]:
-        """
-        Get a single card by exact name match.
-        
-        Args:
-            name: Card name
-        
-        Returns:
-            Card object or None
-        """
+        # Get a single card by name. Checks: exact name, front face, printed_name, flavor_name.
         cards = self.get_all_cards()
+        name_lower = name.lower().strip()
+        
         for card in cards:
-            if card.get('name', '').lower() == name.lower():
+            card_name = card.get('name', '').lower()
+            # Exact match
+            if card_name == name_lower:
                 return card
+        
+        # Fallback: match front face of multiface cards (e.g. "Fire // Ice" → "Fire")
+        for card in cards:
+            full_name = card.get('name', '')
+            if ' // ' in full_name:
+                front_face = full_name.split(' // ')[0].lower().strip()
+                if front_face == name_lower:
+                    return card
+        
+        # Fallback: match printed_name (Universes Beyond / Marvel cards)
+        for card in cards:
+            printed = card.get('printed_name', '').lower().strip()
+            if printed and printed == name_lower:
+                return card
+        
+        # Fallback: match flavor_name (Godzilla / IP showcase cards)
+        for card in cards:
+            flavor = card.get('flavor_name', '').lower().strip()
+            if flavor and flavor == name_lower:
+                return card
+        
+        # Final fallback: live Scryfall API for cards not in S3 bulk data
+        import requests
+        try:
+            resp = requests.get(
+                'https://api.scryfall.com/cards/named',
+                params={'fuzzy': name},
+                timeout=5
+            )
+            if resp.status_code == 200:
+                card_data = resp.json()
+                logger.info(f"Fetched '{name}' from Scryfall API (not in S3 bulk data)")
+                return card_data
+        except Exception as e:
+            logger.warning(f"Scryfall API fallback failed for '{name}': {e}")
+        
         return None
     
     def get_card_by_scryfall_id(self, scryfall_id: str) -> Optional[Dict]:
@@ -143,36 +175,30 @@ class ScryfallS3Service:
     
     @staticmethod
     def get_card_image_url(card: Dict, format: str = 'normal') -> Optional[str]:
-        """
-        Extract image URL from card object.
-        
-        Args:
-            card: Card object from Scryfall
-            format: Image format - 'png', 'border_crop', 'art_crop', 'large', 'normal', 'small'
-        
-        Returns:
-            Image URL or None
-        """
-        image_uris = card.get('image_uris', {})
-        return image_uris.get(format)
+        # Extract image URL from card object.
+        # Falls back to card_faces[0] for multiface cards (DFCs, split, flip).
+        image_uris = card.get('image_uris')
+        if not image_uris and card.get('card_faces'):
+            image_uris = card['card_faces'][0].get('image_uris', {})
+        return image_uris.get(format) if image_uris else None
     
     @staticmethod
     def format_card_for_display(card: Dict) -> Dict:
-        """
-        Format card data for frontend display.
+        # Format card data for frontend display.
+        # Pulls mana_cost and oracle_text from card_faces[0] for multiface cards.
+        mana_cost = card.get('mana_cost', '')
+        oracle_text = card.get('oracle_text', '')
+        if not mana_cost and card.get('card_faces'):
+            mana_cost = card['card_faces'][0].get('mana_cost', '')
+        if not oracle_text and card.get('card_faces'):
+            oracle_text = card['card_faces'][0].get('oracle_text', '')
         
-        Args:
-            card: Raw card object from Scryfall
-        
-        Returns:
-            Formatted card data
-        """
         return {
             'id': card.get('id'),
             'name': card.get('name'),
-            'mana_cost': card.get('mana_cost', ''),
+            'mana_cost': mana_cost,
             'type_line': card.get('type_line'),
-            'oracle_text': card.get('oracle_text', ''),
+            'oracle_text': oracle_text,
             'power': card.get('power'),
             'toughness': card.get('toughness'),
             'colors': card.get('colors', []),
