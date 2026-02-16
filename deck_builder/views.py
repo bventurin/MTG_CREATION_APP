@@ -306,7 +306,7 @@ def generate_qr_code(request, deck_id):
         deck_url = request.build_absolute_uri(f'/decks/{deck_id}/')
         
         # Generate QR code using service
-        qr_code_url = QRService.get_qr_code_url(deck_url)
+        qr_code_url = QRService.get_qr_code_url(deck_id, deck_url)
             
         return JsonResponse({
             'success': True,

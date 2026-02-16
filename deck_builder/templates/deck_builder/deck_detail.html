@@ -14,8 +14,14 @@
         </div>
         <div class="col-auto">
             <div class="btn-group" role="group">
-                <button id="share-qr-btn" class="btn btn-info" title="Generate QR Code"><i class="bi bi-qr-code me-2"></i>Share</button>
                 <a href="{% url 'get_recommendations' deck.deck_id %}" class="btn btn-success"><i class="bi bi-lightbulb me-2"></i>Get AI Suggestions</a>
+                <div class="btn-group position-relative" role="group">
+                    <button id="share-qr-btn" class="btn btn-info" title="Generate QR Code"><i class="bi bi-qr-code me-2"></i>Share</button>
+                    <div id="qr-code-popup" class="d-none position-absolute bg-white border rounded shadow p-2" style="top: 100%; left: 0; z-index: 1000; width: 200px;">
+                        <img id="qr-code-img" src="" class="img-fluid" alt="QR Code">
+                        <div class="small text-muted mt-1 text-center">Scan to share</div>
+                    </div>
+                </div>
                 <a href="{% url 'edit_deck' deck.deck_id %}" class="btn btn-outline-primary"><i class="bi bi-pencil me-2"></i>Edit</a>
                 <a href="{% url 'deck_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back</a>
             </div>
@@ -299,6 +305,9 @@ document.addEventListener('DOMContentLoaded', function() {
 // Share button - Generate QR code
 document.addEventListener('DOMContentLoaded', function() {
     const shareBtn = document.getElementById('share-qr-btn');
+    const qrPopup = document.getElementById('qr-code-popup');
+    const qrImg = document.getElementById('qr-code-img');
+    
     if (!shareBtn) {
         console.error('Share button not found!');
         return;
@@ -306,8 +315,25 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('Share button found, attaching listener...');
     
+    // Hover behavior
+    shareBtn.addEventListener('mouseenter', function() {
+        if (shareBtn.dataset.qrReady === 'true') {
+            qrPopup.classList.remove('d-none');
+        }
+    });
+    
+    shareBtn.addEventListener('mouseleave', function() {
+        qrPopup.classList.add('d-none');
+    });
+    
     shareBtn.addEventListener('click', function(e) {
         e.preventDefault();
+        
+        // If already generated, just show it
+        if (shareBtn.dataset.qrReady === 'true') {
+            qrPopup.classList.remove('d-none');
+            return;
+        }
         
         // Add loading state
         const originalContent = shareBtn.innerHTML;
@@ -337,7 +363,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(function(data) {
             console.log('Response data:', data);
             if (data.success) {
-                window.open(data.qr_code_url, '_blank');
+                qrImg.src = data.qr_code_url;
+                shareBtn.dataset.qrReady = 'true';
+                qrPopup.classList.remove('d-none');
             } else {
                 alert('Error: ' + (data.error || 'Unknown error'));
             }
