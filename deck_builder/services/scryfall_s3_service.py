@@ -22,9 +22,7 @@ s3_client = boto3.client(
 
 @lru_cache(maxsize=1)
 def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
-    """
-    Cached function to fetch all cards from S3 (only loads once per bucket/type combo).
-    """
+    #Cached function to fetch all cards from S3 (only loads once per bucket/type combo).
     try:
         data_key = f"scryfall/{bulk_type}/latest.json"
         logger.info(f"Loading cards from S3: s3://{bucket_name}/{data_key}")

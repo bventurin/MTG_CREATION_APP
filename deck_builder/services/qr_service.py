@@ -7,15 +7,11 @@ import base64
 logger = logging.getLogger(__name__)
 
 class QRService:
-    """Service to handle QR code generation logic."""
+    #Service to handle QR code generation logic
     
     @staticmethod
     def get_qr_code_url(deck_id, deck_url):
-        """
-        Generate a QR code URL for the given deck URL.
-        Uses a private service defined in env vars.
-        """
-        # Get QR code service endpoint from environment
+        #Generate a QR code URL for the given deck URL.
         qr_endpoint = os.getenv('QR_CODE_ENDPOINT')
         
         if not qr_endpoint:

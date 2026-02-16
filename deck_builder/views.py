@@ -5,7 +5,10 @@ from django.views.decorators.http import require_http_methods
 from .services.dynamodb_service import DynamoDBService
 from .services.card_organizer import organize_cards_by_type
 from .services.qr_service import QRService
+from .services.voucher_service import VoucherService
+from .services.scryfall_s3_service import ScryfallS3Service
 from card_recommender.services.ai_recommender import DeckRecommendationAgent
+from decimal import Decimal
 import re
 
 # Create your views here.
@@ -126,13 +129,47 @@ def deck_detail(request, deck_id):
     for cards_list in sideboard_list.values():
         sideboard_flat.extend(cards_list)
     
+    
+    # Calculate deck total price
+    scryfall_service = ScryfallS3Service()
+    # Ensure cache is loaded
+    scryfall_service.get_all_cards()
+    
+    total_price = Decimal('0.00')
+    
+    # helper to get price from card name
+    def get_card_price(card_name):
+        card_data = scryfall_service.get_card_by_name(card_name)
+        if card_data:
+            prices = card_data.get('prices', {})
+            usd = prices.get('usd')
+            if usd:
+                return Decimal(usd)
+        return Decimal('0.00')
+
+    for card in all_cards:
+        price = get_card_price(card['card_name'])
+        qty = Decimal(card['quantity'])
+        total_price += price * qty
+        
     context = {
         'deck': deck,
         'main_deck_organized': main_deck_organized,
         'sideboard_flat': sideboard_flat,
         'main_deck_count': sum(c['quantity'] for c in main_deck),
         'sideboard_count': sum(c['quantity'] for c in sideboard),
+        'total_price': total_price,
     }
+    
+    # Handle Voucher
+    if deck.get('voucher_code'):
+        # Apply 20% discount
+        discount_percent = Decimal('0.20')
+        discount_amount = total_price * discount_percent
+        discounted_price = total_price - discount_amount
+        context['discounted_price'] = round(discounted_price, 2)
+        context['voucher_code'] = deck.get('voucher_code')
+        
     return render(request, 'deck_builder/deck_detail.html', context)
 
 @login_required(login_url='login')
@@ -315,3 +352,25 @@ def generate_qr_code(request, deck_id):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+@require_http_methods(["POST"])
+@login_required(login_url='login')
+def add_voucher(request, deck_id):
+    """Generate and add a voucher to the deck"""
+    db = DynamoDBService()
+    deck = db.get_deck(str(request.user.id), str(deck_id))
+    
+    if not deck:
+        return redirect('deck_list')
+        
+    if deck.get('voucher_code'):
+        # Already has voucher
+        return redirect('deck_detail', deck_id=deck_id)
+        
+    # Generate voucher
+    voucher_code = VoucherService.generate_voucher()
+    
+    if voucher_code:
+        db.apply_voucher_to_deck(str(request.user.id), str(deck_id), voucher_code)
+        
+    return redirect('deck_detail', deck_id=deck_id)

@@ -1,7 +1,3 @@
-"""
-Utility to organize cards by type and fetch card details from S3.
-"""
-
 from typing import Dict, List
 from functools import lru_cache
 import logging
@@ -17,13 +13,13 @@ _scryfall_service = None
 
 
 def _get_all_cards_cached():
-    """Load all cards from S3 once and cache them with an index."""
+    # Load all cards from S3 once and cache them with an index.
     global _cards_cache, _cards_index, _scryfall_service
     if _cards_cache is None:
         _scryfall_service = ScryfallS3Service()
         _cards_cache = _scryfall_service.get_all_cards()
         
-        # Build index for O(1) lookups
+    # Build index for O(1) lookups
         _cards_index = {}
         for card in _cards_cache:
             card_name = card.get('name', '').lower().strip()
@@ -34,10 +30,9 @@ def _get_all_cards_cached():
 
 
 def _find_card_in_cache(card_name: str) -> Dict:
-    """Find a card in the cached data by name using O(1) index lookup.
+    #Find a card in the cached data by name using O(1) index lookup.
+    #Tries exact match first, then fuzzy match if needed.
     
-    Tries exact match first, then fuzzy match if needed.
-    """
     _get_all_cards_cached()  # Ensure cache and index are loaded
     global _cards_index
     
@@ -67,7 +62,7 @@ def _find_card_in_cache(card_name: str) -> Dict:
 
 
 def _string_similarity(a: str, b: str) -> float:
-    """Simple string similarity score using Levenshtein-like logic."""
+    #Simple string similarity score using Levenshtein-like logic.
     if a == b:
         return 1.0
     if len(a) == 0 or len(b) == 0:
@@ -79,15 +74,8 @@ def _string_similarity(a: str, b: str) -> float:
 
 
 def get_card_type_category(type_line: str) -> str:
-    """
-    Categorize a Magic card by its primary type.
+    # Categorize a Magic card by its primary type.
     
-    Args:
-        type_line: Card type line (e.g., "Land — Mountain", "Sorcery", "Creature — Goblin")
-    
-    Returns:
-        Category: 'Creature', 'Sorcery', 'Instant', 'Enchantment', 'Artifact', 'Planeswalker', 'Land', 'Other'
-    """
     type_line_lower = type_line.lower()
     
     if 'creature' in type_line_lower:
@@ -109,16 +97,9 @@ def get_card_type_category(type_line: str) -> str:
 
 
 def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
-    """
-    Organize cards by their type category.
-    Fetches card details from cached S3 data for performance.
+    # Organize cards by their type category.
+    # Fetches card details from cached S3 data for performance.
     
-    Args:
-        cards_data: List of card dicts with 'card_name', 'quantity', etc.
-    
-    Returns:
-        Dict with type categories as keys and list of cards as values
-    """
     organized = {}
     
     for card_info in cards_data:
@@ -180,23 +161,14 @@ def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
 
 
 def clear_cache():
-    """Clear the cards cache (useful for testing or manual refresh)."""
+    # Clear the cards cache (useful for testing or manual refresh).
     global _cards_cache, _cards_index
     _cards_cache = None
     _cards_index = None
 
 
 def get_deck_metadata(cards_data: List[Dict]) -> Dict:
-    """
-    Lightweight function to get deck color identity and representative card.
-    Much faster than organize_cards_by_type() for deck list views.
-    
-    Args:
-        cards_data: List of card dicts with 'card_name', 'quantity', etc.
-    
-    Returns:
-        Dict with 'colors' (list) and 'representative_image' (str or None)
-    """
+    # Lightweight function to get deck color identity and representative card.
     colors = set()
     representative_card = None
     highest_price = 0

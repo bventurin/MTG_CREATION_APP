@@ -11,4 +11,5 @@ urlpatterns = [
     path('decks/<uuid:deck_id>/delete/', views.delete_deck, name='delete_deck'),
     path('decks/<uuid:deck_id>/recommendations/', views.get_recommendations, name='get_recommendations'),
     path('decks/<uuid:deck_id>/qr-code/', views.generate_qr_code, name='generate_qr_code'),
+    path('decks/<uuid:deck_id>/add-voucher/', views.add_voucher, name='add_voucher'),
 ]

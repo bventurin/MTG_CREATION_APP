@@ -13,10 +13,9 @@ class DynamoDBService:
         self.table = self.dynamodb.Table(self.table_name)
     
     def create_deck(self, user_id, deck_name, cards_data):
-        """
-        Create a new deck
-        cards_data format: [{'card_name': 'Lightning Strike', 'quantity': 4, 'is_sideboard': False}, ...]
-        """
+        
+        #Create a new deck
+       
         deck_id = str(uuid.uuid4())
         timestamp = datetime.now().isoformat()
         
@@ -150,4 +149,23 @@ class DynamoDBService:
                 }
             )
         
+        return True
+    
+    def apply_voucher_to_deck(self, user_id, deck_id, voucher_code):
+        # Apply a voucher to a deck.
+        timestamp = datetime.now().isoformat()
+        
+        self.table.update_item(
+            Key={
+                'pk': f'USER#{user_id}',
+                'sk': f'DECK#{deck_id}'
+            },
+        # Sets voucher_code and voucher_discount (20%) on the deck item.
+            UpdateExpression='SET voucher_code = :code, voucher_discount = :discount, updated_at = :updated',
+            ExpressionAttributeValues={
+                ':code': voucher_code,
+                ':discount': Decimal('20'),  # 20% discount
+                ':updated': timestamp
+            }
+        )
         return True

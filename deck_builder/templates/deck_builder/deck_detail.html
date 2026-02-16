@@ -9,30 +9,70 @@
         <div class="col">
             <h2>{{ deck.name }}</h2>
             <p class="text-muted">
-                <small>Created: {{ deck.created_at|date:"M d, Y H:i" }} • <strong>{{ main_deck_count }}</strong> main • <strong>{{ sideboard_count }}</strong> sideboard</small>
+                <small>Created: {{ deck.created_at|date:"M d, Y H:i" }} • <strong>{{ main_deck_count }}</strong> main •
+                    <strong>{{ sideboard_count }}</strong> sideboard</small>
             </p>
         </div>
         <div class="col-auto">
             <div class="btn-group" role="group">
-                <a href="{% url 'get_recommendations' deck.deck_id %}" class="btn btn-success"><i class="bi bi-lightbulb me-2"></i>Get AI Suggestions</a>
+                <a href="{% url 'get_recommendations' deck.deck_id %}" class="btn btn-success"><i
+                        class="bi bi-lightbulb me-2"></i>Get AI Suggestions</a>
                 <div class="btn-group position-relative" role="group">
-                    <button id="share-qr-btn" class="btn btn-info" title="Generate QR Code"><i class="bi bi-qr-code me-2"></i>Share</button>
-                    <div id="qr-code-popup" class="d-none position-absolute bg-white border rounded shadow p-2" style="top: 100%; left: 0; z-index: 1000; width: 200px;">
+                    <button id="share-qr-btn" class="btn btn-info" title="Generate QR Code"><i
+                            class="bi bi-qr-code me-2"></i>Share</button>
+                    <div id="qr-code-popup" class="d-none position-absolute bg-white border rounded shadow p-2"
+                        style="top: 100%; left: 0; z-index: 1000; width: 200px;">
                         <img id="qr-code-img" src="" class="img-fluid" alt="QR Code">
                         <div class="small text-muted mt-1 text-center">Scan to share</div>
                     </div>
                 </div>
-                <a href="{% url 'edit_deck' deck.deck_id %}" class="btn btn-outline-primary"><i class="bi bi-pencil me-2"></i>Edit</a>
-                <a href="{% url 'deck_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back</a>
+                <a href="{% url 'edit_deck' deck.deck_id %}" class="btn btn-outline-primary"><i
+                        class="bi bi-pencil me-2"></i>Edit</a>
+                <a href="{% url 'deck_list' %}" class="btn btn-outline-secondary"><i
+                        class="bi bi-arrow-left me-2"></i>Back</a>
             </div>
             {% csrf_token %}
+        </div>
+    </div>
+
+    <!-- Value & Voucher Section -->
+    <div class="card mb-4 border-success">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h5 class="card-title mb-0">Total Deck Value</h5>
+                    <p class="display-6 mb-0">
+                        {% if voucher_code %}
+                        <span class="text-decoration-line-through text-muted">${{ total_price|floatformat:2 }}</span>
+                        <span class="text-success">${{ discounted_price|floatformat:2 }}</span>
+                        {% else %}
+                        ${{ total_price|floatformat:2 }}
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="col-md-6 text-md-end mt-3 mt-md-0">
+                    {% if voucher_code %}
+                    <div class="alert alert-success d-inline-block mb-0">
+                        <strong><i class="bi bi-tag-fill me-2"></i>Voucher Applied!</strong><br>
+                        Code: <code class="fs-5">{{ voucher_code }}</code> (-20%)
+                    </div>
+                    {% else %}
+                    <form action="{% url 'add_voucher' deck.deck_id %}" method="post" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-lg btn-success">
+                            <i class="bi bi-tag-fill me-2"></i>Get 20% Discount Voucher
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 
     <!-- Main Deck -->
     <div class="mb-5">
         <h4 class="mb-3"><span class="badge bg-primary">{{ main_deck_count }} cards</span> Main Deck</h4>
-        
+
         {% for type_category, cards in main_deck_organized.items %}
         <div class="mb-4">
             <h6 class="text-muted text-uppercase mb-3"><small>{{ type_category }} ({{ cards|length }})</small></h6>
@@ -49,7 +89,8 @@
                     </thead>
                     <tbody>
                         {% for card in cards %}
-                        <tr class="card-row {% if card.type_line|stringformat:'s'|slice:':8' == '(Not found' %}missing-data{% endif %}" data-image="{{ card.image_url }}">
+                        <tr class="card-row {% if card.type_line|stringformat:'s'|slice:':8' == '(Not found' %}missing-data{% endif %}"
+                            data-image="{{ card.image_url }}">
                             <td class="fw-bold">{{ card.quantity }}x</td>
                             <td>
                                 <span class="card-name-hover">{{ card.card_name }}</span>
@@ -57,16 +98,16 @@
                             <td class="text-end">{{ card.mana_cost|mana_icons|mark_safe_mana }}</td>
                             <td class="text-end">
                                 {% if card.price %}
-                                    ${{ card.price|floatformat:2 }}
+                                ${{ card.price|floatformat:2 }}
                                 {% else %}
-                                    $0.00
+                                $0.00
                                 {% endif %}
                             </td>
                             <td class="text-end fw-bold">
                                 {% if card.price %}
-                                    ${{ card.price|mul:card.quantity|floatformat:2 }}
+                                ${{ card.price|mul:card.quantity|floatformat:2 }}
                                 {% else %}
-                                    $0.00
+                                $0.00
                                 {% endif %}
                             </td>
                         </tr>
@@ -87,7 +128,7 @@
     {% if sideboard_flat %}
     <div class="mb-5">
         <h4 class="mb-3"><span class="badge bg-secondary">{{ sideboard_count }} cards</span> Sideboard</h4>
-        
+
         <div class="table-responsive">
             <table class="table table-sm table-hover deck-detail-table">
                 <thead class="table-light">
@@ -101,7 +142,8 @@
                 </thead>
                 <tbody>
                     {% for card in sideboard_flat %}
-                    <tr class="card-row {% if card.type_line|stringformat:'s'|slice:':8' == '(Not found' %}missing-data{% endif %}" data-image="{{ card.image_url }}">
+                    <tr class="card-row {% if card.type_line|stringformat:'s'|slice:':8' == '(Not found' %}missing-data{% endif %}"
+                        data-image="{{ card.image_url }}">
                         <td class="fw-bold">{{ card.quantity }}x</td>
                         <td>
                             <span class="card-name-hover">{{ card.card_name }}</span>
@@ -109,16 +151,16 @@
                         <td class="text-end">{{ card.mana_cost|mana_icons|mark_safe_mana }}</td>
                         <td class="text-end">
                             {% if card.price %}
-                                ${{ card.price|floatformat:2 }}
+                            ${{ card.price|floatformat:2 }}
                             {% else %}
-                                $0.00
+                            $0.00
                             {% endif %}
                         </td>
                         <td class="text-end fw-bold">
                             {% if card.price %}
-                                ${{ card.price|mul:card.quantity|floatformat:2 }}
+                            ${{ card.price|mul:card.quantity|floatformat:2 }}
                             {% else %}
-                                $0.00
+                            $0.00
                             {% endif %}
                         </td>
                     </tr>
@@ -141,244 +183,244 @@
 </div>
 
 <script>
-document.querySelectorAll('.card-name-hover').forEach(cardName => {
-    cardName.addEventListener('mouseenter', function(e) {
-        const row = cardName.closest('.card-row');
-        const imageUrl = row.dataset.image;
-        if (!imageUrl) return;
-        
-        const tooltip = document.getElementById('card-image-tooltip');
-        const img = document.getElementById('tooltip-image');
-        img.src = imageUrl;
-        tooltip.style.display = 'block';
-        
-        // Position tooltip near cursor
-        const updatePosition = (e) => {
-            tooltip.style.left = (e.clientX + 15) + 'px';
-            tooltip.style.top = (e.clientY + 15) + 'px';
-        };
-        
-        updatePosition(e);
-        cardName.addEventListener('mousemove', updatePosition);
-        
-        cardName.addEventListener('mouseleave', function() {
-            tooltip.style.display = 'none';
-            cardName.removeEventListener('mousemove', updatePosition);
-        }, { once: true });
-    });
-});
+    document.querySelectorAll('.card-name-hover').forEach(cardName => {
+        cardName.addEventListener('mouseenter', function (e) {
+            const row = cardName.closest('.card-row');
+            const imageUrl = row.dataset.image;
+            if (!imageUrl) return;
 
-// Fetch missing card data from Scryfall API
-document.addEventListener('DOMContentLoaded', function() {
-    const missingRows = document.querySelectorAll('.card-row.missing-data');
-    
-    if (missingRows.length > 0) {
-        console.log(`Found ${missingRows.length} missing cards, fetching from Scryfall API...`);
-    }
-    
-    // Add delay between requests to respect Scryfall rate limits (10 requests per second)
-    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-    
-    async function fetchCardData() {
-        for (const row of missingRows) {
-            const cardNameSpan = row.querySelector('.card-name-hover');
-            if (!cardNameSpan) continue;
-            
-            const cardName = cardNameSpan.textContent.trim();
-            console.log(`Fetching: ${cardName}`);
-            
-            try {
-                let data = null;
-                
-                // Method 1: Try exact match using /cards/named endpoint
-                try {
-                    const exactResponse = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}`);
-                    if (exactResponse.ok) {
-                        data = await exactResponse.json();
-                        console.log(`✓ Found exact match: ${data.name}`);
-                    }
-                } catch (e) {
-                    console.log(`Exact match failed for ${cardName}`);
-                }
-                
-                // Method 2: Try fuzzy match using /cards/named endpoint
-                if (!data) {
-                    try {
-                        const fuzzyResponse = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`);
-                        if (fuzzyResponse.ok) {
-                            data = await fuzzyResponse.json();
-                            console.log(`✓ Found fuzzy match: ${data.name}`);
-                        }
-                    } catch (e) {
-                        console.log(`Fuzzy match failed for ${cardName}`);
-                    }
-                }
-                
-                // Method 3: Try search endpoint as last resort
-                if (!data) {
-                    try {
-                        const searchResponse = await fetch(`https://api.scryfall.com/cards/search?q=!"${encodeURIComponent(cardName)}"`);
-                        if (searchResponse.ok) {
-                            const searchData = await searchResponse.json();
-                            if (searchData.data && searchData.data.length > 0) {
-                                data = searchData.data[0]; // Take first result
-                                console.log(`✓ Found via search: ${data.name}`);
-                            }
-                        }
-                    } catch (e) {
-                        console.log(`Search failed for ${cardName}`);
-                    }
-                }
-                
-                if (!data) {
-                    console.error(`✗ Could not find ${cardName} on Scryfall`);
-                    await delay(100); // Small delay before next card
-                    continue;
-                }
-                
-                // Update card image
-                if (data.image_uris && data.image_uris.normal) {
-                    row.dataset.image = data.image_uris.normal;
-                } else if (data.card_faces && data.card_faces[0] && data.card_faces[0].image_uris) {
-                    row.dataset.image = data.card_faces[0].image_uris.normal;
-                }
-                
-                // Update mana cost
-                const manaCell = row.cells[2];
-                let manaCost = data.mana_cost || '';
-                if (!manaCost && data.card_faces && data.card_faces[0]) {
-                    manaCost = data.card_faces[0].mana_cost || '';
-                }
-                if (manaCost) {
-                    const manaHtml = manaCost.replace(/{([^}]+)}/g, (match, symbol) => {
-                        const cleanSymbol = symbol.toLowerCase().replace(/\//g, '');
-                        return `<i class="ms ms-${cleanSymbol} ms-cost ms-shadow"></i>`;
-                    });
-                    manaCell.innerHTML = `<span class="mana-cost">${manaHtml}</span>`;
-                    manaCell.classList.add('text-end');
-                }
-                
-                // Update price
-                if (data.prices && data.prices.usd) {
-                    const price = parseFloat(data.prices.usd);
-                    const qtyText = row.cells[0].textContent.trim();
-                    const qty = parseInt(qtyText);
-                    
-                    row.cells[3].textContent = `$${price.toFixed(2)}`;
-                    row.cells[3].classList.add('text-end');
-                    
-                    row.cells[4].textContent = `$${(price * qty).toFixed(2)}`;
-                    row.cells[4].classList.add('text-end', 'fw-bold');
-                } else {
-                    row.cells[3].textContent = '$0.00';
-                    row.cells[3].classList.add('text-end');
-                    row.cells[4].textContent = '$0.00';
-                    row.cells[4].classList.add('text-end', 'fw-bold');
-                }
-                
-                // Clean up UI
-                const nextRow = row.nextElementSibling;
-                if (nextRow && nextRow.classList.contains('text-muted')) {
-                    nextRow.remove();
-                }
-                
-                row.style.backgroundColor = '';
-                row.classList.remove('missing-data');
-                
-                console.log(`✓ Successfully updated ${cardName}`);
-                // Delay to respect Scryfall rate limits (100ms = max 10 requests/second)
-                await delay(100);
-                
-            } catch (e) {
-                console.error(`Error fetching ${cardName}:`, e);
-                await delay(100);
-            }
-        }
-        
-        console.log('Finished fetching missing cards');
-    }
-    
-    // Start fetching
-    fetchCardData();
-});
+            const tooltip = document.getElementById('card-image-tooltip');
+            const img = document.getElementById('tooltip-image');
+            img.src = imageUrl;
+            tooltip.style.display = 'block';
 
-// Share button - Generate QR code
-document.addEventListener('DOMContentLoaded', function() {
-    const shareBtn = document.getElementById('share-qr-btn');
-    const qrPopup = document.getElementById('qr-code-popup');
-    const qrImg = document.getElementById('qr-code-img');
-    
-    if (!shareBtn) {
-        console.error('Share button not found!');
-        return;
-    }
-    
-    console.log('Share button found, attaching listener...');
-    
-    // Hover behavior
-    shareBtn.addEventListener('mouseenter', function() {
-        if (shareBtn.dataset.qrReady === 'true') {
-            qrPopup.classList.remove('d-none');
-        }
-    });
-    
-    shareBtn.addEventListener('mouseleave', function() {
-        qrPopup.classList.add('d-none');
-    });
-    
-    shareBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        // If already generated, just show it
-        if (shareBtn.dataset.qrReady === 'true') {
-            qrPopup.classList.remove('d-none');
-            return;
-        }
-        
-        // Add loading state
-        const originalContent = shareBtn.innerHTML;
-        shareBtn.disabled = true;
-        shareBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
-        
-        const deckId = '{{ deck.deck_id }}';
-        
-        // Get CSRF token from form
-        const csrfTokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
-        const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
-        
-        const url = '/decks/' + deckId + '/qr-code/';
-        
-        fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            },
-            mode: 'same-origin'
-        })
-        .then(function(res) {
-            console.log('Response status:', res.status);
-            return res.json();
-        })
-        .then(function(data) {
-            console.log('Response data:', data);
-            if (data.success) {
-                qrImg.src = data.qr_code_url;
-                shareBtn.dataset.qrReady = 'true';
-                qrPopup.classList.remove('d-none');
-            } else {
-                alert('Error: ' + (data.error || 'Unknown error'));
-            }
-        })
-        .catch(function(e) {
-            console.error('Fetch error:', e);
-            alert('Error: ' + e.message);
-        })
-        .finally(function() {
-            shareBtn.disabled = false;
-            shareBtn.innerHTML = originalContent;
+            // Position tooltip near cursor
+            const updatePosition = (e) => {
+                tooltip.style.left = (e.clientX + 15) + 'px';
+                tooltip.style.top = (e.clientY + 15) + 'px';
+            };
+
+            updatePosition(e);
+            cardName.addEventListener('mousemove', updatePosition);
+
+            cardName.addEventListener('mouseleave', function () {
+                tooltip.style.display = 'none';
+                cardName.removeEventListener('mousemove', updatePosition);
+            }, { once: true });
         });
     });
-});
+
+    // Fetch missing card data from Scryfall API
+    document.addEventListener('DOMContentLoaded', function () {
+        const missingRows = document.querySelectorAll('.card-row.missing-data');
+
+        if (missingRows.length > 0) {
+            console.log(`Found ${missingRows.length} missing cards, fetching from Scryfall API...`);
+        }
+
+        // Add delay between requests to respect Scryfall rate limits (10 requests per second)
+        const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        async function fetchCardData() {
+            for (const row of missingRows) {
+                const cardNameSpan = row.querySelector('.card-name-hover');
+                if (!cardNameSpan) continue;
+
+                const cardName = cardNameSpan.textContent.trim();
+                console.log(`Fetching: ${cardName}`);
+
+                try {
+                    let data = null;
+
+                    // Method 1: Try exact match using /cards/named endpoint
+                    try {
+                        const exactResponse = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}`);
+                        if (exactResponse.ok) {
+                            data = await exactResponse.json();
+                            console.log(`✓ Found exact match: ${data.name}`);
+                        }
+                    } catch (e) {
+                        console.log(`Exact match failed for ${cardName}`);
+                    }
+
+                    // Method 2: Try fuzzy match using /cards/named endpoint
+                    if (!data) {
+                        try {
+                            const fuzzyResponse = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`);
+                            if (fuzzyResponse.ok) {
+                                data = await fuzzyResponse.json();
+                                console.log(`✓ Found fuzzy match: ${data.name}`);
+                            }
+                        } catch (e) {
+                            console.log(`Fuzzy match failed for ${cardName}`);
+                        }
+                    }
+
+                    // Method 3: Try search endpoint as last resort
+                    if (!data) {
+                        try {
+                            const searchResponse = await fetch(`https://api.scryfall.com/cards/search?q=!"${encodeURIComponent(cardName)}"`);
+                            if (searchResponse.ok) {
+                                const searchData = await searchResponse.json();
+                                if (searchData.data && searchData.data.length > 0) {
+                                    data = searchData.data[0]; // Take first result
+                                    console.log(`✓ Found via search: ${data.name}`);
+                                }
+                            }
+                        } catch (e) {
+                            console.log(`Search failed for ${cardName}`);
+                        }
+                    }
+
+                    if (!data) {
+                        console.error(`✗ Could not find ${cardName} on Scryfall`);
+                        await delay(100); // Small delay before next card
+                        continue;
+                    }
+
+                    // Update card image
+                    if (data.image_uris && data.image_uris.normal) {
+                        row.dataset.image = data.image_uris.normal;
+                    } else if (data.card_faces && data.card_faces[0] && data.card_faces[0].image_uris) {
+                        row.dataset.image = data.card_faces[0].image_uris.normal;
+                    }
+
+                    // Update mana cost
+                    const manaCell = row.cells[2];
+                    let manaCost = data.mana_cost || '';
+                    if (!manaCost && data.card_faces && data.card_faces[0]) {
+                        manaCost = data.card_faces[0].mana_cost || '';
+                    }
+                    if (manaCost) {
+                        const manaHtml = manaCost.replace(/{([^}]+)}/g, (match, symbol) => {
+                            const cleanSymbol = symbol.toLowerCase().replace(/\//g, '');
+                            return `<i class="ms ms-${cleanSymbol} ms-cost ms-shadow"></i>`;
+                        });
+                        manaCell.innerHTML = `<span class="mana-cost">${manaHtml}</span>`;
+                        manaCell.classList.add('text-end');
+                    }
+
+                    // Update price
+                    if (data.prices && data.prices.usd) {
+                        const price = parseFloat(data.prices.usd);
+                        const qtyText = row.cells[0].textContent.trim();
+                        const qty = parseInt(qtyText);
+
+                        row.cells[3].textContent = `$${price.toFixed(2)}`;
+                        row.cells[3].classList.add('text-end');
+
+                        row.cells[4].textContent = `$${(price * qty).toFixed(2)}`;
+                        row.cells[4].classList.add('text-end', 'fw-bold');
+                    } else {
+                        row.cells[3].textContent = '$0.00';
+                        row.cells[3].classList.add('text-end');
+                        row.cells[4].textContent = '$0.00';
+                        row.cells[4].classList.add('text-end', 'fw-bold');
+                    }
+
+                    // Clean up UI
+                    const nextRow = row.nextElementSibling;
+                    if (nextRow && nextRow.classList.contains('text-muted')) {
+                        nextRow.remove();
+                    }
+
+                    row.style.backgroundColor = '';
+                    row.classList.remove('missing-data');
+
+                    console.log(`✓ Successfully updated ${cardName}`);
+                    // Delay to respect Scryfall rate limits (100ms = max 10 requests/second)
+                    await delay(100);
+
+                } catch (e) {
+                    console.error(`Error fetching ${cardName}:`, e);
+                    await delay(100);
+                }
+            }
+
+            console.log('Finished fetching missing cards');
+        }
+
+        // Start fetching
+        fetchCardData();
+    });
+
+    // Share button - Generate QR code
+    document.addEventListener('DOMContentLoaded', function () {
+        const shareBtn = document.getElementById('share-qr-btn');
+        const qrPopup = document.getElementById('qr-code-popup');
+        const qrImg = document.getElementById('qr-code-img');
+
+        if (!shareBtn) {
+            console.error('Share button not found!');
+            return;
+        }
+
+        console.log('Share button found, attaching listener...');
+
+        // Hover behavior
+        shareBtn.addEventListener('mouseenter', function () {
+            if (shareBtn.dataset.qrReady === 'true') {
+                qrPopup.classList.remove('d-none');
+            }
+        });
+
+        shareBtn.addEventListener('mouseleave', function () {
+            qrPopup.classList.add('d-none');
+        });
+
+        shareBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+
+            // If already generated, just show it
+            if (shareBtn.dataset.qrReady === 'true') {
+                qrPopup.classList.remove('d-none');
+                return;
+            }
+
+            // Add loading state
+            const originalContent = shareBtn.innerHTML;
+            shareBtn.disabled = true;
+            shareBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
+
+            const deckId = '{{ deck.deck_id }}';
+
+            // Get CSRF token from form
+            const csrfTokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
+            const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+
+            const url = '/decks/' + deckId + '/qr-code/';
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                mode: 'same-origin'
+            })
+                .then(function (res) {
+                    console.log('Response status:', res.status);
+                    return res.json();
+                })
+                .then(function (data) {
+                    console.log('Response data:', data);
+                    if (data.success) {
+                        qrImg.src = data.qr_code_url;
+                        shareBtn.dataset.qrReady = 'true';
+                        qrPopup.classList.remove('d-none');
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(function (e) {
+                    console.error('Fetch error:', e);
+                    alert('Error: ' + e.message);
+                })
+                .finally(function () {
+                    shareBtn.disabled = false;
+                    shareBtn.innerHTML = originalContent;
+                });
+        });
+    });
 </script>
 {% endblock %}
