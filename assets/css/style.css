@@ -43,6 +43,16 @@
     background-color: rgba(0, 123, 255, 0.1) !important;
 }
 
+/* QR Code Hover Popup */
+.qr-share-trigger:hover~.qr-popup,
+.qr-popup:hover {
+    display: block !important;
+}
+
+.qr-popup {
+    display: none;
+}
+
 .card-row.missing-data {
     background-color: rgba(255, 193, 7, 0.1);
 }
@@ -117,11 +127,25 @@
 }
 
 /* Mana Symbol Colors */
-.ms-w { filter: brightness(1.2); }
-.ms-u { filter: brightness(1.3); }
-.ms-b { filter: brightness(1.5); }
-.ms-r { filter: brightness(1.2); }
-.ms-g { filter: brightness(1.2); }
+.ms-w {
+    filter: brightness(1.2);
+}
+
+.ms-u {
+    filter: brightness(1.3);
+}
+
+.ms-b {
+    filter: brightness(1.5);
+}
+
+.ms-r {
+    filter: brightness(1.2);
+}
+
+.ms-g {
+    filter: brightness(1.2);
+}
 
 /* Table Cell Alignment */
 .deck-detail-table td {

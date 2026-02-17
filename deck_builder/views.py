@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponseBadRequest
+from django.http import HttpResponseBadRequest
 from django.views.decorators.http import require_http_methods
 from .services.dynamodb_service import DynamoDBService
 from .services.card_organizer import organize_cards_by_type
@@ -169,6 +169,11 @@ def deck_detail(request, deck_id):
         discounted_price = total_price - discount_amount
         context['discounted_price'] = round(discounted_price, 2)
         context['voucher_code'] = deck.get('voucher_code')
+    
+    # Handle QR code from session
+    qr_session_key = f'qr_code_{deck_id}'
+    if qr_session_key in request.session:
+        context['qr_code_url'] = request.session[qr_session_key]
         
     return render(request, 'deck_builder/deck_detail.html', context)
 
@@ -337,21 +342,15 @@ def get_recommendations(request, deck_id):
 @require_http_methods(["POST"])
 @login_required(login_url='login')
 def generate_qr_code(request, deck_id):
-    """Generate QR code for deck sharing using external service"""
+    # Generate QR code for deck sharing and redirect back
     try:
-        # Build the deck URL
         deck_url = request.build_absolute_uri(f'/decks/{deck_id}/')
-        
-        # Generate QR code using service
         qr_code_url = QRService.get_qr_code_url(deck_id, deck_url)
-            
-        return JsonResponse({
-            'success': True,
-            'qr_code_url': qr_code_url,
-            'deck_url': deck_url
-        })
+        # Store QR URL in session so deck_detail can display it
+        request.session[f'qr_code_{deck_id}'] = qr_code_url
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.error(f"QR code generation failed: {e}")
+    return redirect('deck_detail', deck_id=deck_id)
 
 @require_http_methods(["POST"])
 @login_required(login_url='login')
