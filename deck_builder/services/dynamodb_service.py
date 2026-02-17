@@ -86,7 +86,7 @@ class DynamoDBService:
         return items
     
     def update_deck(self, user_id, deck_id, deck_name, cards_data):
-        # Update a deck (name and all cards)
+        # Update a deck
         timestamp = datetime.now().isoformat()
         
         # Update deck item

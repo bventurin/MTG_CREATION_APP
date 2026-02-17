@@ -8,6 +8,7 @@ import boto3
 import logging
 import os
 import requests
+import unicodedata
 from io import BytesIO
 from typing import List, Dict, Optional
 from functools import lru_cache
@@ -23,7 +24,7 @@ s3_client = boto3.client(
 
 @lru_cache(maxsize=1)
 def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
-    #Cached function to fetch all cards from S3 (only loads once per bucket/type combo).
+    # Cached function to fetch all cards from S3 (only loads once per bucket/type combo).
     try:
         data_key = f"scryfall/{bulk_type}/latest.json"
         logger.info(f"Loading cards from S3: s3://{bucket_name}/{data_key}")
@@ -47,20 +48,59 @@ def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
         return []
 
 
+# Global name index for O(1) lookups (built once)
+_cards_index = None
+
+
+def _build_index(cards: List[Dict]) -> Dict[str, Dict]:
+    # Build a name -> card dictionary for O(1) lookups.
+    index = {}
+    for card in cards:
+        card_name = card.get('name', '').lower().strip()
+        if card_name:
+            index[card_name] = card
+            if ' // ' in card_name:
+                front_face = card_name.split(' // ')[0].strip()
+                if front_face and front_face not in index:
+                    index[front_face] = card
+
+        printed_name = card.get('printed_name', '').lower().strip()
+        if printed_name and printed_name not in index:
+            index[printed_name] = card
+
+        flavor_name = card.get('flavor_name', '').lower().strip()
+        if flavor_name and flavor_name not in index:
+            index[flavor_name] = card
+
+    return index
+
+
+def _string_similarity(a: str, b: str) -> float:
+    # Simple positional character similarity score.
+    if a == b:
+        return 1.0
+    if len(a) == 0 or len(b) == 0:
+        return 0.0
+    matches = sum(1 for i, c in enumerate(a) if i < len(b) and c == b[i])
+    return matches / max(len(a), len(b))
+
+
 class ScryfallS3Service:
-    """Service to interact with Scryfall card data stored in S3."""
+    # Service to interact with Scryfall card data stored in S3.
     
     def __init__(self, bucket_name: Optional[str] = None, bulk_type: str = 'default_cards'):
         self.bucket_name = bucket_name or os.getenv('AWS_S3_BUCKET_NAME', 'magic-card-data')
         self.bulk_type = bulk_type
     
+    def _get_index(self) -> Dict[str, Dict]:
+        # Return (and lazily build) the global name index.
+        global _cards_index
+        if _cards_index is None:
+            _cards_index = _build_index(self.get_all_cards())
+        return _cards_index
+    
     def get_sync_metadata(self) -> Dict:
-        """
-        Fetch metadata about the latest sync from Lambda.
-        
-        Returns:
-            Dict with sync info or None if not found
-        """
+        # Fetch metadata about the latest sync from Lambda.
         try:
             metadata_key = f"scryfall/{self.bulk_type}/sync_metadata.json"
             response = s3_client.get_object(Bucket=self.bucket_name, Key=metadata_key)
@@ -74,74 +114,48 @@ class ScryfallS3Service:
             return None
     
     def get_all_cards(self) -> List[Dict]:
-        """
-        Fetch all cards from the latest bulk data file in S3.
-        Uses LRU cache for performance.
-        
-        Returns:
-            List of card objects
-        """
+        # Fetch all cards from the latest bulk data file in S3. 
         return _get_all_cards_cached(self.bucket_name, self.bulk_type)
     
     def search_cards(self, query: str) -> List[Dict]:
-        """
-        Search cards by name or features.
-        
-        Args:
-            query: Search term (card name, type, etc.)
-        
-        Returns:
-            List of matching cards
-        """
+        # Search cards by name, type, or oracle text.
         cards = self.get_all_cards()
         query_lower = query.lower()
         
         results = []
         for card in cards:
-            # Search by name
             if query_lower in card.get('name', '').lower():
                 results.append(card)
-            # Search by type
             elif query_lower in card.get('type_line', '').lower():
                 results.append(card)
-            # Search by oracle text
             elif query_lower in card.get('oracle_text', '').lower():
                 results.append(card)
         
         return results
     
     def get_card_by_name(self, name: str) -> Optional[Dict]:
-        # Get a single card by name. Checks: exact name, front face, printed_name, flavor_name.
-        cards = self.get_all_cards()
+        # Get a single card by name using O(1) index lookup.
+        # Falls back to: normalized chars, fuzzy match, then live Scryfall API.
+        index = self._get_index()
         name_lower = name.lower().strip()
         
-        for card in cards:
-            card_name = card.get('name', '').lower()
-            # Exact match
-            if card_name == name_lower:
+        # O(1) exact match
+        if name_lower in index:
+            return index[name_lower]
+        
+        # Try without accented characters (e.g. "Æ" -> "A")
+        normalized = unicodedata.normalize('NFD', name_lower)
+        normalized = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+        if normalized in index:
+            return index[normalized]
+        
+        # Fuzzy match
+        for indexed_name, card in index.items():
+            if (name_lower in indexed_name or indexed_name in name_lower or
+                _string_similarity(name_lower, indexed_name) > 0.85):
                 return card
         
-        # Fallback: match front face of multiface cards (e.g. "Fire // Ice" → "Fire")
-        for card in cards:
-            full_name = card.get('name', '')
-            if ' // ' in full_name:
-                front_face = full_name.split(' // ')[0].lower().strip()
-                if front_face == name_lower:
-                    return card
-        
-        # Fallback: match printed_name (Universes Beyond / Marvel cards)
-        for card in cards:
-            printed = card.get('printed_name', '').lower().strip()
-            if printed and printed == name_lower:
-                return card
-        
-        # Fallback: match flavor_name (Godzilla / IP showcase cards)
-        for card in cards:
-            flavor = card.get('flavor_name', '').lower().strip()
-            if flavor and flavor == name_lower:
-                return card
-        
-        # Final fallback: live Scryfall API for cards not in S3 bulk data
+        # Final fallback: live Scryfall API
         try:
             resp = requests.get(
                 'https://api.scryfall.com/cards/named',
@@ -150,6 +164,8 @@ class ScryfallS3Service:
             )
             if resp.status_code == 200:
                 card_data = resp.json()
+                # Cache it for future lookups
+                index[name_lower] = card_data
                 logger.info(f"Fetched '{name}' from Scryfall API (not in S3 bulk data)")
                 return card_data
         except Exception as e:
@@ -158,15 +174,7 @@ class ScryfallS3Service:
         return None
     
     def get_card_by_scryfall_id(self, scryfall_id: str) -> Optional[Dict]:
-        """
-        Get a single card by Scryfall ID.
-        
-        Args:
-            scryfall_id: Scryfall UUID
-        
-        Returns:
-            Card object or None
-        """
+        # Get a single card by Scryfall ID.
         cards = self.get_all_cards()
         for card in cards:
             if card.get('id') == scryfall_id:
@@ -208,3 +216,9 @@ class ScryfallS3Service:
             'image_url': ScryfallS3Service.get_card_image_url(card, 'normal'),
             'image_url_large': ScryfallS3Service.get_card_image_url(card, 'large'),
         }
+    
+    @staticmethod
+    def clear_index():
+        # Clear the global index (useful for testing or manual refresh).
+        global _cards_index
+        _cards_index = None

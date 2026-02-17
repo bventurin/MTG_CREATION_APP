@@ -1,96 +1,12 @@
 from typing import Dict, List
-from functools import lru_cache
 import logging
-import unicodedata
 from .scryfall_s3_service import ScryfallS3Service
 
 logger = logging.getLogger(__name__)
 
 
-# Global cache for all cards (loaded once)
-_cards_cache = None
-_cards_index = None  # Dictionary for O(1) lookup
-_scryfall_service = None
-
-
-def _get_all_cards_cached():
-    # Load all cards from S3 once and cache them with an index.
-    global _cards_cache, _cards_index, _scryfall_service
-    if _cards_cache is None:
-        _scryfall_service = ScryfallS3Service()
-        _cards_cache = _scryfall_service.get_all_cards()
-        
-        # Build index for O(1) lookups
-        _cards_index = {}
-        for card in _cards_cache:
-            card_name = card.get('name', '').lower().strip()
-            if card_name:
-                _cards_index[card_name] = card
-                # Also index front face of multiface cards (e.g. "Fire // Ice" -> index "fire")
-                if ' // ' in card_name:
-                    front_face = card_name.split(' // ')[0].strip()
-                    if front_face and front_face not in _cards_index:
-                        _cards_index[front_face] = card
-            
-            # Index printed_name (Universes Beyond / Marvel cards, e.g. "Kavaero, Mind-Bitten")
-            printed_name = card.get('printed_name', '').lower().strip()
-            if printed_name and printed_name not in _cards_index:
-                _cards_index[printed_name] = card
-            
-            # Index flavor_name (Godzilla / IP showcase cards)
-            flavor_name = card.get('flavor_name', '').lower().strip()
-            if flavor_name and flavor_name not in _cards_index:
-                _cards_index[flavor_name] = card
-    
-    return _cards_cache
-
-
-def _find_card_in_cache(card_name: str) -> Dict:
-    #Find a card in the cached data by name using O(1) index lookup.
-    #Tries exact match first, then fuzzy match if needed.
-    
-    _get_all_cards_cached()  # Ensure cache and index are loaded
-    global _cards_index
-    
-    card_name_lower = card_name.lower().strip()
-    
-    # First try exact match using index (O(1))
-    if card_name_lower in _cards_index:
-        return _cards_index[card_name_lower]
-    
-    # Try match without special characters (e.g., "Æ" → "A")
-    normalized_search = unicodedata.normalize('NFD', card_name_lower)
-    normalized_search = ''.join(c for c in normalized_search if unicodedata.category(c) != 'Mn')
-    
-    # Try normalized lookup in index
-    if normalized_search in _cards_index:
-        return _cards_index[normalized_search]
-    
-    # Fallback: Try fuzzy match (only if exact fails)
-    for indexed_name, card in _cards_index.items():
-        # Check if card name is contained in search or similar
-        if (card_name_lower in indexed_name or indexed_name in card_name_lower or
-            _string_similarity(card_name_lower, indexed_name) > 0.85):
-            return card
-    
-    return None
-
-
-def _string_similarity(a: str, b: str) -> float:
-    #Simple string similarity score using Levenshtein-like logic.
-    if a == b:
-        return 1.0
-    if len(a) == 0 or len(b) == 0:
-        return 0.0
-    
-    # Count matching characters
-    matches = sum(1 for i, c in enumerate(a) if i < len(b) and c == b[i])
-    return matches / max(len(a), len(b))
-
-
 def get_card_type_category(type_line: str) -> str:
     # Categorize a Magic card by its primary type.
-    
     type_line_lower = type_line.lower()
     
     if 'creature' in type_line_lower:
@@ -113,25 +29,14 @@ def get_card_type_category(type_line: str) -> str:
 
 def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
     # Organize cards by their type category.
-    # Fetches card details from cached S3 data for performance.
-    
+    scryfall_service = ScryfallS3Service()
     organized = {}
     
     for card_info in cards_data:
         card_name = card_info.get('card_name')
-        
-        # Fetch card from cache (not from S3 each time)
-        card_data = _find_card_in_cache(card_name)
+        card_data = scryfall_service.get_card_by_name(card_name)
         
         if not card_data:
-            # Fallback: use ScryfallS3Service which has live API fallback built in
-            card_data = ScryfallS3Service().get_card_by_name(card_name)
-            if card_data and _cards_index is not None:
-                _cards_index[card_name.lower().strip()] = card_data
-                logger.info(f"Cached '{card_name}' from Scryfall API fallback")
-        
-        if not card_data:
-            # If still not found, use placeholder
             logger.warning(f"Card not found in Scryfall database: {card_name}")
             category = 'Unknown'
             card_with_details = {
@@ -187,15 +92,8 @@ def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
     return sorted_organized
 
 
-def clear_cache():
-    # Clear the cards cache (useful for testing or manual refresh).
-    global _cards_cache, _cards_index
-    _cards_cache = None
-    _cards_index = None
-
-
 def get_deck_metadata(cards_data: List[Dict]) -> Dict:
-    # Lightweight function to get deck color identity and representative card.
+    scryfall_service = ScryfallS3Service()
     colors = set()
     representative_card = None
     highest_price = 0
@@ -203,17 +101,15 @@ def get_deck_metadata(cards_data: List[Dict]) -> Dict:
     
     for card_info in cards_data:
         card_name = card_info.get('card_name')
-        card_data = _find_card_in_cache(card_name)
+        card_data = scryfall_service.get_card_by_name(card_name)
         
         if not card_data:
             continue
         
-        # Collect colors
         card_colors = card_data.get('colors', [])
         if card_colors:
             colors.update(card_colors)
         
-        # Find representative card (prefer creatures, then highest price non-land)
         image_url = ScryfallS3Service.get_card_image_url(card_data, 'normal')
         if not image_url:
             continue
@@ -240,16 +136,13 @@ def get_deck_metadata(cards_data: List[Dict]) -> Dict:
             highest_price = card_price
             is_creature = is_card_creature
         elif is_card_creature and not is_creature:
-            # Prefer creatures over non-creatures
             representative_card = image_url
             highest_price = card_price
             is_creature = True
         elif is_card_creature and is_creature and card_price > highest_price:
-            # Among creatures, pick highest price
             representative_card = image_url
             highest_price = card_price
         elif not is_creature and not is_card_creature and card_price > highest_price:
-            # Among non-creature spells, pick highest price
             representative_card = image_url
             highest_price = card_price
     
