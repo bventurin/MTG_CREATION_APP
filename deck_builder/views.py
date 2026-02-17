@@ -3,15 +3,64 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseBadRequest
 from django.views.decorators.http import require_http_methods
 from .services.dynamodb_service import DynamoDBService
-from .services.card_organizer import organize_cards_by_type
+from .services.card_organizer import organize_cards_by_type, get_deck_metadata
 from .services.qr_service import QRService
 from .services.voucher_service import VoucherService
 from .services.scryfall_s3_service import ScryfallS3Service
 from card_recommender.services.ai_recommender import DeckRecommendationAgent
 from decimal import Decimal
 import re
+import logging
 
-# Create your views here.
+logger = logging.getLogger(__name__)
+
+
+def parse_deck_list(text):
+    """Parse a deck list text into a deck name and list of card dicts.
+    
+    Returns:
+        tuple: (deck_name, cards_data) where cards_data is a list of dicts
+               with keys: card_name, quantity, is_sideboard
+    """
+    deck_name = None
+    cards_data = []
+    lines = text.strip().split('\n')
+    current_section = None
+
+    # Default to 'deck' section if no section headers are found
+    if 'deck' not in [line.strip().lower() for line in lines if line.strip().lower() in ['deck', 'sideboard']]:
+        current_section = 'deck'
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        if line.lower() == 'deck':
+            current_section = 'deck'
+            continue
+        elif line.lower() == 'sideboard':
+            current_section = 'sideboard'
+            continue
+        elif line.lower().startswith('name '):
+            deck_name = line[5:].strip()
+            continue
+        elif line.lower() in ['about']:
+            continue
+
+        # Card line format: "4 Card Name"
+        match = re.match(r'^(\d+)\s+(.*)', line)
+        if match and current_section:
+            quantity = int(match.group(1))
+            card_name = match.group(2).strip()
+            is_sideboard = (current_section == 'sideboard')
+            cards_data.append({
+                'card_name': card_name,
+                'quantity': quantity,
+                'is_sideboard': is_sideboard
+            })
+
+    return deck_name, cards_data
 
 def home(request):
     decks = []
@@ -19,14 +68,10 @@ def home(request):
         db = DynamoDBService()
         decks = db.get_user_decks(str(request.user.id))
         
-        # Add card count, color identity, and representative card image for each deck
-        from .services.card_organizer import get_deck_metadata
-        
         for deck in decks:
             cards = db.get_deck_cards(deck['deck_id'])
             deck['card_count'] = sum(c['quantity'] for c in cards)
             
-            # Get deck metadata (colors and representative card)
             main_deck = [c for c in cards if not c.get('is_sideboard')]
             metadata = get_deck_metadata(main_deck)
             
@@ -41,45 +86,8 @@ def create_deck(request):
     
     if request.method == 'POST':
         deck_list_text = request.POST.get('deck_list', '')
-        deck_name = 'Untitled Deck'
-        cards_data = []
-        
-        lines = deck_list_text.strip().split('\n')
-        current_section = None
-
-        # Default to 'deck' section if no section headers are found
-        if 'deck' not in [line.strip().lower() for line in lines if line.strip().lower() in ['deck', 'sideboard']]:
-            current_section = 'deck'
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            if line.lower() == 'deck':
-                current_section = 'deck'
-                continue
-            elif line.lower() == 'sideboard':
-                current_section = 'sideboard'
-                continue
-            elif line.lower().startswith('name '):
-                deck_name = line[5:].strip()
-                continue
-            elif line.lower() in ['about']:
-                continue
-
-            # Card line format: "4 Card Name"
-            match = re.match(r'^(\d+)\s+(.*)', line)
-            if match and current_section:
-                quantity = int(match.group(1))
-                card_name = match.group(2).strip()
-                is_sideboard = (current_section == 'sideboard')
-                
-                cards_data.append({
-                    'card_name': card_name,
-                    'quantity': quantity,
-                    'is_sideboard': is_sideboard
-                })
+        deck_name, cards_data = parse_deck_list(deck_list_text)
+        deck_name = deck_name or 'Untitled Deck'
 
         if cards_data:
             deck_id = db.create_deck(str(request.user.id), deck_name, cards_data)
@@ -92,14 +100,10 @@ def deck_list(request):
     db = DynamoDBService()
     decks = db.get_user_decks(str(request.user.id))
     
-    # Add card count, color identity, and representative card image for each deck
-    from .services.card_organizer import get_deck_metadata
-    
     for deck in decks:
         cards = db.get_deck_cards(deck['deck_id'])
         deck['card_count'] = sum(c['quantity'] for c in cards)
         
-        # Get deck metadata (colors and representative card)
         main_deck = [c for c in cards if not c.get('is_sideboard')]
         metadata = get_deck_metadata(main_deck)
         
@@ -183,52 +187,14 @@ def edit_deck(request, deck_id):
     deck = db.get_deck(str(request.user.id), str(deck_id))
     
     if request.method == 'POST':
-        deck_name = request.POST.get('deck_name', deck.get('name'))
         deck_list_text = request.POST.get('deck_list', '')
+        parsed_name, cards_data = parse_deck_list(deck_list_text)
         
-        main_deck = []
-        sideboard = []
-        
-        lines = deck_list_text.strip().split('\n')
-        current_section = None
+        # Use form field deck_name if provided, else parsed name, else existing name
+        deck_name = request.POST.get('deck_name') or parsed_name or deck.get('name')
 
-        # Default to 'deck' section if no section headers are found
-        if 'deck' not in [line.strip().lower() for line in lines if line.strip().lower() in ['deck', 'sideboard']]:
-            current_section = 'deck'
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            if line.lower() == 'deck':
-                current_section = 'deck'
-                continue
-            elif line.lower() == 'sideboard':
-                current_section = 'sideboard'
-                continue
-            elif line.lower().startswith('name '):
-                # Allow overriding deck name from text
-                if not request.POST.get('deck_name'):
-                    deck_name = line[5:].strip()
-                continue
-            elif line.lower() in ['about']:
-                continue
-
-            # Card line format: "4 Card Name"
-            match = re.match(r'^(\d+)\s+(.*)', line)
-            if match and current_section:
-                quantity = int(match.group(1))
-                card_name = match.group(2).strip()
-                
-                if current_section == 'deck':
-                    main_deck.append({'quantity': quantity, 'card_name': card_name, 'is_sideboard': False})
-                elif current_section == 'sideboard':
-                    sideboard.append({'quantity': quantity, 'card_name': card_name, 'is_sideboard': True})
-
-        if main_deck or sideboard:
-            all_cards = main_deck + sideboard
-            db.update_deck(str(request.user.id), str(deck_id), deck_name, all_cards)
+        if cards_data:
+            db.update_deck(str(request.user.id), str(deck_id), deck_name, cards_data)
             return redirect('deck_detail', deck_id=deck_id)
 
     # Get current deck contents for the form
@@ -280,7 +246,6 @@ def get_recommendations(request, deck_id):
     if request.method == 'POST':
         card_names_to_add = request.POST.getlist('cards')
         if card_names_to_add:
-            # Add each recommended card with quantity 1
             new_cards = [{'card_name': name, 'quantity': 1, 'is_sideboard': False} for name in card_names_to_add]
             updated_cards = main_deck + new_cards
             db.update_deck(str(request.user.id), str(deck_id), deck.get('name'), updated_cards)
@@ -293,34 +258,29 @@ def get_recommendations(request, deck_id):
     agent = DeckRecommendationAgent()
     recommendations = agent.get_deck_improvement_recommendations(card_names, format_name="standard")
     
-    # Fetch card details for recommendations (use cached data)
-    from .services.scryfall_s3_service import ScryfallS3Service
+    # Fetch card details using the existing cached service
     scryfall_service = ScryfallS3Service()
-    all_cards = scryfall_service.get_all_cards()  # Cached - loads once
-    
-    # Create lookup map for fast searching
-    cards_by_name = {card.get('name', '').lower(): card for card in all_cards}
     
     recommendations_with_details = []
     for card_name in recommendations:
-        card_data = cards_by_name.get(card_name.lower())
+        card_data = scryfall_service.get_card_by_name(card_name)
         if card_data:
-            # Extract price
             prices = card_data.get('prices', {})
-            usd_price = prices.get('usd')
+            usd_price = prices.get('usd') or prices.get('usd_foil') or prices.get('eur')
             try:
-                if usd_price is None or usd_price == '':
-                    usd_price = 0.0
-                else:
-                    usd_price = float(usd_price)
+                usd_price = float(usd_price) if usd_price else 0.0
             except (ValueError, TypeError):
                 usd_price = 0.0
+            
+            mana_cost = card_data.get('mana_cost', '')
+            if not mana_cost and card_data.get('card_faces'):
+                mana_cost = card_data['card_faces'][0].get('mana_cost', '')
             
             recommendations_with_details.append({
                 'name': card_name,
                 'type_line': card_data.get('type_line', ''),
                 'image_url': ScryfallS3Service.get_card_image_url(card_data, 'normal'),
-                'mana_cost': card_data.get('mana_cost', ''),
+                'mana_cost': mana_cost,
                 'price': usd_price,
             })
         else:
@@ -342,11 +302,16 @@ def get_recommendations(request, deck_id):
 @require_http_methods(["POST"])
 @login_required(login_url='login')
 def generate_qr_code(request, deck_id):
-    # Generate QR code for deck sharing and redirect back
+    """Generate QR code for deck sharing and redirect back."""
+    db = DynamoDBService()
+    deck = db.get_deck(str(request.user.id), str(deck_id))
+    
+    if not deck:
+        return redirect('deck_list')
+    
     try:
         deck_url = request.build_absolute_uri(f'/decks/{deck_id}/')
         qr_code_url = QRService.get_qr_code_url(deck_id, deck_url)
-        # Store QR URL in session so deck_detail can display it
         request.session[f'qr_code_{deck_id}'] = qr_code_url
     except Exception as e:
         logger.error(f"QR code generation failed: {e}")

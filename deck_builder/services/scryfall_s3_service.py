@@ -7,6 +7,7 @@ import gzip
 import boto3
 import logging
 import os
+import requests
 from io import BytesIO
 from typing import List, Dict, Optional
 from functools import lru_cache
@@ -141,7 +142,6 @@ class ScryfallS3Service:
                 return card
         
         # Final fallback: live Scryfall API for cards not in S3 bulk data
-        import requests
         try:
             resp = requests.get(
                 'https://api.scryfall.com/cards/named',

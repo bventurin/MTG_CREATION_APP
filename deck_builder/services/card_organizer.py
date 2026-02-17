@@ -1,6 +1,7 @@
 from typing import Dict, List
 from functools import lru_cache
 import logging
+import unicodedata
 from .scryfall_s3_service import ScryfallS3Service
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,6 @@ def _find_card_in_cache(card_name: str) -> Dict:
         return _cards_index[card_name_lower]
     
     # Try match without special characters (e.g., "Æ" → "A")
-    import unicodedata
     normalized_search = unicodedata.normalize('NFD', card_name_lower)
     normalized_search = ''.join(c for c in normalized_search if unicodedata.category(c) != 'Mn')
     
@@ -124,24 +124,11 @@ def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
         card_data = _find_card_in_cache(card_name)
         
         if not card_data:
-            # Fallback: try live Scryfall API for cards not in S3 bulk data
-            import requests
-            import time
-            try:
-                resp = requests.get(
-                    f'https://api.scryfall.com/cards/named',
-                    params={'fuzzy': card_name},
-                    timeout=5
-                )
-                if resp.status_code == 200:
-                    card_data = resp.json()
-                    # Cache it for future lookups
-                    if _cards_index is not None:
-                        _cards_index[card_name.lower().strip()] = card_data
-                    logger.info(f"Fetched '{card_name}' from Scryfall API (not in S3 bulk data)")
-                    time.sleep(0.1)  # Respect rate limits
-            except Exception as e:
-                logger.warning(f"Scryfall API fallback failed for '{card_name}': {e}")
+            # Fallback: use ScryfallS3Service which has live API fallback built in
+            card_data = ScryfallS3Service().get_card_by_name(card_name)
+            if card_data and _cards_index is not None:
+                _cards_index[card_name.lower().strip()] = card_data
+                logger.info(f"Cached '{card_name}' from Scryfall API fallback")
         
         if not card_data:
             # If still not found, use placeholder
