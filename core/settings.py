@@ -28,10 +28,13 @@ load_dotenv(BASE_DIR / '.env')
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-i1#wzou%1t=w#m)z=m)^l1=-rbm2+0)jn0#7#5%&^l+-dg^r_n'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
-ALLOWED_HOSTS = []
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
+
+ALLOWED_HOSTS = ['*']  # For initial deployment; lock this down to your specific EB domain later.
+
+CSRF_TRUSTED_ORIGINS = ['https://*.elasticbeanstalk.com']
 
 
 # Application definition
@@ -127,6 +130,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STATICFILES_DIRS = [
     BASE_DIR / 'assets',
