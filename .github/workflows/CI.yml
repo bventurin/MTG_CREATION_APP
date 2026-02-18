@@ -40,6 +40,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-1
 
+      - name: Set EB environment variables from secrets
+        run: |
+          aws elasticbeanstalk update-environment \
+            --environment-name AetherFlow-env \
+            --option-settings \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=DATABASE_URL,Value="${{ secrets.DATABASE_URL }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=GEMINI_API_KEY,Value="${{ secrets.GEMINI_API_KEY }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=QR_CODE_ENDPOINT,Value="${{ secrets.QR_CODE_ENDPOINT }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=VOUCHER_SERVICE_ENDPOINT,Value="${{ secrets.VOUCHER_SERVICE_ENDPOINT }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=SECRET_KEY,Value="${{ secrets.DJANGO_SECRET_KEY }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=AWS_S3_BUCKET_NAME,Value="magic-card-data"
+
+      - name: Wait for environment to be ready
+        run: |
+          echo "Waiting for environment to be ready..."
+          aws elasticbeanstalk wait environment-updated --environment-name AetherFlow-env
+          echo "Environment is ready for deployment."
+
       - name: Create deployment package (ZIP)
         run: zip -r deployment-package.zip . -x "*.git*" "*.venv*"
 
