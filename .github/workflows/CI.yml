@@ -50,6 +50,6 @@ jobs:
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           application_name: AetherFlow-app
           environment_name: AetherFlow-env
-          version_label: ${{ github.sha }}
+          version_label: ${{ github.sha }}-${{ github.run_id }}
           region: eu-west-1
           deployment_package: deployment-package.zip
