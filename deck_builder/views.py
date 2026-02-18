@@ -338,3 +338,27 @@ def add_voucher(request, deck_id):
         db.apply_voucher_to_deck(str(request.user.id), str(deck_id), voucher_code)
         
     return redirect('deck_detail', deck_id=deck_id)
+
+
+def test_db_connection(request):
+    """
+    Temporary view to test database connectivity and return specific errors.
+    """
+    import os
+    from django.db import connections
+    from django.http import HttpResponse
+
+    try:
+        db_conn = connections['default']
+        db_conn.cursor()
+        host = db_conn.settings_dict.get('HOST', 'UNKNOWN')
+        return HttpResponse(f"<h1>SUCCESS</h1><p>Connected to: {host}</p>")
+    except Exception as e:
+        # Get start of env var safely
+        env_var = os.environ.get('DATABASE_URL', 'NOT SET')
+        if env_var != 'NOT SET':
+            env_var_preview = env_var[:25] + '...'
+        else:
+            env_var_preview = 'NOT SET'
+            
+        return HttpResponse(f"<h1>FAILURE</h1><p>Error: {str(e)}</p><p>Type: {type(e).__name__}</p><p>Env Var: {env_var_preview}</p>")
