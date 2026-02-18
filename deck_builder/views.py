@@ -63,22 +63,27 @@ def parse_deck_list(text):
     return deck_name, cards_data
 
 def home(request):
-    decks = []
-    if request.user.is_authenticated:
-        db = DynamoDBService()
-        decks = db.get_user_decks(str(request.user.id))
+    try:
+        decks = []
+        if request.user.is_authenticated:
+            db = DynamoDBService()
+            decks = db.get_user_decks(str(request.user.id))
+            
+            for deck in decks:
+                cards = db.get_deck_cards(deck['deck_id'])
+                deck['card_count'] = sum(c['quantity'] for c in cards)
+                
+                main_deck = [c for c in cards if not c.get('is_sideboard')]
+                metadata = get_deck_metadata(main_deck)
+                
+                deck['color_identity'] = metadata['colors']
+                deck['representative_image'] = metadata['representative_image']
         
-        for deck in decks:
-            cards = db.get_deck_cards(deck['deck_id'])
-            deck['card_count'] = sum(c['quantity'] for c in cards)
-            
-            main_deck = [c for c in cards if not c.get('is_sideboard')]
-            metadata = get_deck_metadata(main_deck)
-            
-            deck['color_identity'] = metadata['colors']
-            deck['representative_image'] = metadata['representative_image']
-    
-    return render(request, 'deck_builder/home.html', {'decks': decks})
+        return render(request, 'deck_builder/home.html', {'decks': decks})
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return HttpResponseBadRequest(f"<h1>Home Page Crash Report</h1><pre>{error_details}</pre>")
 
 @login_required(login_url='login')
 def create_deck(request):
