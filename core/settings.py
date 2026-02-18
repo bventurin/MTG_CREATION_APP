@@ -86,14 +86,24 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 
 
+# Database Configuration
 DATABASES = {}
 
-if os.getenv('DATABASE_URL'):
-    DATABASES['default'] = dj_database_url.config(
-        default=os.getenv('DATABASE_URL'),
-        conn_max_age=600,
-        ssl_require=True,
-    )
+database_url = os.getenv('DATABASE_URL', '').strip()
+
+if database_url:
+    try:
+        DATABASES['default'] = dj_database_url.config(
+            default=database_url,
+            conn_max_age=600,
+            ssl_require=True,
+        )
+    except Exception as e:
+        print(f"WARNING: Failed to configure database from DATABASE_URL: {e}")
+        DATABASES['default'] = {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
 else:
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -104,9 +114,9 @@ else:
 print("\n" + "="*50)
 if DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
     print("WARNING: Using SQLite database! DATABASE_URL environment variable is missing or invalid.")
-    print(f"DATABASE_URL value seen: {os.getenv('DATABASE_URL', 'NOT SET')}")
+    print(f"DATABASE_URL value seen: '{database_url}'")
 else:
-    print(f"SUCCESS: Using Postgres database at: {DATABASES['default']['HOST']}")
+    print(f"SUCCESS: Using Postgres database at: {DATABASES['default'].get('HOST', 'unknown')}")
 print("="*50 + "\n")
 
 
