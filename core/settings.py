@@ -94,6 +94,15 @@ DATABASES = {
     )
 }
 
+# DEBUG: Print database configuration
+print("\n" + "="*50)
+if DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
+    print("WARNING: Using SQLite database! DATABASE_URL environment variable is missing or invalid.")
+    print(f"DATABASE_URL value seen: {os.getenv('DATABASE_URL', 'NOT SET')}")
+else:
+    print(f"SUCCESS: Using Postgres database at: {DATABASES['default']['HOST']}")
+print("="*50 + "\n")
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
