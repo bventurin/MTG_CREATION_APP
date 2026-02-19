@@ -149,6 +149,9 @@ class ScryfallS3Service:
 
         # Fuzzy match
         for indexed_name, card in index.items():
+            if card is None:
+                continue
+                
             if (
                 name_lower in indexed_name
                 or indexed_name in name_lower
