@@ -7,6 +7,7 @@ from .services.card_organizer import organize_cards_by_type, get_deck_metadata
 from .services.qr_service import QRService
 from .services.voucher_service import VoucherService
 from .services.scryfall_s3_service import ScryfallS3Service
+from .services.plot_service import PlotService
 from card_recommender.services.ai_recommender import DeckRecommendationAgent
 from decimal import Decimal
 import re
@@ -161,6 +162,9 @@ def deck_detail(request, deck_id):
         price = get_card_price(card["card_name"])
         qty = Decimal(card["quantity"])
         total_price += price * qty
+        
+    # Generate Mana Curve Plot
+    mana_curve_url = PlotService.generate_mana_curve_plot(main_deck, scryfall_service)
 
     context = {
         "deck": deck,
@@ -169,6 +173,7 @@ def deck_detail(request, deck_id):
         "main_deck_count": sum(c["quantity"] for c in main_deck),
         "sideboard_count": sum(c["quantity"] for c in sideboard),
         "total_price": total_price,
+        "mana_curve_url": mana_curve_url,
     }
 
     # Handle Voucher
