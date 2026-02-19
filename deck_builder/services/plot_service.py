@@ -80,28 +80,27 @@ class PlotService:
                 qty = int(card.get("quantity", 1))
                 card_data = scryfall_service.get_card_by_name(card["card_name"])
                 
-                # Default to 0 if not found, though ideally we'd skip lands?
-                # For simplicity, we just use the cmc
+                # Default to 0 if not found
                 cmc = 0
                 if card_data:
                     cmc = int(card_data.get("cmc", 0))
-                
-                # Ignore zero cost (usually lands) for the curve chart to make it cleaner
-                if cmc == 0:
-                    continue
+                    
+                    # Ignore lands for the curve chart to make it cleaner
+                    if "land" in str(card_data.get("type_line", "")).lower():
+                        continue
                     
                 if cmc >= 6:
                     mana_curve[6] += qty
                 else:
                     mana_curve[cmc] += qty
             
-            # If the deck has no spells with CMC > 0, don't chart it
+            # If the deck has no spells (only contained lands before), don't chart it
             if sum(mana_curve.values()) == 0:
                 return None
 
             # 2. Build CSV string
             csv_data = "Mana Value,Cards\n"
-            for cmc in range(1, 7):
+            for cmc in range(0, 7):
                 label = f"{cmc}+" if cmc == 6 else str(cmc)
                 csv_data += f"{label},{mana_curve[cmc]}\n"
 
