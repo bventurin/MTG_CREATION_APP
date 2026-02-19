@@ -62,23 +62,13 @@
                 <div class="col-md-6 text-md-end mt-3 mt-md-0">
                     {% if voucher_code %}
                     <div class="d-flex flex-column align-items-end gap-2">
-                        <div class="card border-success shadow-sm" style="max-width: 300px;">
-                            <div class="card-body p-3">
-                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <small class="text-success fw-bold">
-                                        <i class="bi bi-check-circle-fill"></i> Voucher Applied
-                                    </small>
-                                    <span class="badge bg-success">20% OFF</span>
-                                </div>
-                                <div class="border-top pt-2 mt-2">
-                                    <small class="text-muted d-block mb-1">Code:</small>
-                                    <code class="text-dark fw-bold">{{ voucher_code }}</code>
-                                </div>
-                            </div>
+                        <div class="alert alert-success mb-0 py-2 px-3">
+                            <strong><i class="bi bi-tag-fill me-2"></i>Voucher Applied!</strong><br>
+                            <span class="text-muted small">Code:</span> <code class="fs-6">{{ voucher_code }}</code> <span class="badge bg-success">-20%</span>
                         </div>
                         {% if voucher_image_url %}
                         <a href="{{ voucher_image_url }}" download="voucher_{{ voucher_code }}.png" class="btn btn-success btn-sm">
-                            <i class="bi bi-download me-1"></i>Download Voucher PNG
+                            <i class="bi bi-download me-2"></i>Download Voucher PNG
                         </a>
                         {% endif %}
                     </div>
@@ -86,7 +76,7 @@
                     <form action="{% url 'add_voucher' deck.deck_id %}" method="post" class="d-inline">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-lg btn-success">
-                            <i class="bi bi-tag-fill me-2"></i>Generate 20% Voucher
+                            <i class="bi bi-tag-fill me-2"></i>Get 20% Discount
                         </button>
                     </form>
                     {% endif %}
