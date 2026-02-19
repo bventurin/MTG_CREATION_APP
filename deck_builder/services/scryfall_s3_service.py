@@ -159,8 +159,11 @@ class ScryfallS3Service:
             ):
                 return card
 
+        import time
         # Final fallback: live Scryfall API
         try:
+            # Scryfall requests 50-100ms delay between requests (max 10/sec)
+            time.sleep(0.1)
             resp = requests.get(
                 "https://api.scryfall.com/cards/named",
                 params={"fuzzy": name},
@@ -172,8 +175,13 @@ class ScryfallS3Service:
                 index[name_lower] = card_data
                 logger.info(f"Fetched '{name}' from Scryfall API (not in S3 bulk data)")
                 return card_data
+            elif resp.status_code == 429:
+                logger.warning(f"Scryfall API rate limit (429) hit for '{name}'")
+                # Don't cache None for rate limits, so we can try again next time!
+                return None
             else:
-                # Cache the failure so we don't spam the API on subsequent loops (HTTP 429 risk)
+                logger.warning(f"Card not found in Scryfall database: {name} (Status: {resp.status_code})")
+                # Cache the failure so we don't spam the API on subsequent loops
                 index[name_lower] = None
         except Exception as e:
             logger.warning(f"Scryfall API fallback failed for '{name}': {e}")
