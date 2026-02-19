@@ -90,9 +90,12 @@
             <small class="text-white-50">Powered by <a href="https://fileapi.arijitdeb.com" target="_blank"
                     class="text-info text-decoration-underline">FileConvert API</a></small>
         </div>
-        <div class="card-body text-center bg-light">
-            <img src="{{ mana_curve_url }}" alt="Deck Mana Curve" class="img-fluid rounded border"
-                style="max-height: 400px; object-fit: contain;">
+        <div class="card-body text-center bg-light py-4">
+            <!-- Crop the image to hide the API's default "Data Plot" title and borders -->
+            <div class="overflow-hidden mx-auto rounded bg-white shadow-sm border" style="max-width: 620px;">
+                <img src="{{ mana_curve_url }}" alt="Deck Mana Curve" class="img-fluid"
+                    style="margin-top: -40px; margin-bottom: -15px; width: 104%; max-width: 104%; margin-left: -2%;">
+            </div>
         </div>
     </div>
     {% endif %}
