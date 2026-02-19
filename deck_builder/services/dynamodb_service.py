@@ -151,21 +151,32 @@ class DynamoDBService:
         
         return True
     
-    def apply_voucher_to_deck(self, user_id, deck_id, voucher_code):
+    def apply_voucher_to_deck(self, user_id, deck_id, voucher_code, voucher_image_url=None, voucher_image_key=None):
         # Apply a voucher to a deck.
         timestamp = datetime.now().isoformat()
+
+        update_expression = 'SET voucher_code = :code, voucher_discount = :discount, updated_at = :updated'
+        expression_attribute_values = {
+            ':code': voucher_code,
+            ':discount': Decimal('20'),  # 20% discount
+            ':updated': timestamp
+        }
+
+        if voucher_image_url:
+            update_expression += ', voucher_image_url = :image_url'
+            expression_attribute_values[':image_url'] = voucher_image_url
+
+        if voucher_image_key:
+            update_expression += ', voucher_image_key = :image_key'
+            expression_attribute_values[':image_key'] = voucher_image_key
         
         self.table.update_item(
             Key={
                 'pk': f'USER#{user_id}',
                 'sk': f'DECK#{deck_id}'
             },
-        # Sets voucher_code and voucher_discount (20%) on the deck item.
-            UpdateExpression='SET voucher_code = :code, voucher_discount = :discount, updated_at = :updated',
-            ExpressionAttributeValues={
-                ':code': voucher_code,
-                ':discount': Decimal('20'),  # 20% discount
-                ':updated': timestamp
-            }
+            # Sets voucher_code and voucher_discount (20%) and optional voucher image metadata on the deck item.
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values
         )
         return True

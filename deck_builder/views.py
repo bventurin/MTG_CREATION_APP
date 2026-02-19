@@ -173,6 +173,7 @@ def deck_detail(request, deck_id):
         discounted_price = total_price - discount_amount
         context['discounted_price'] = round(discounted_price, 2)
         context['voucher_code'] = deck.get('voucher_code')
+        context['voucher_image_url'] = deck.get('voucher_image_url')
     
     # Handle QR code from session
     qr_session_key = f'qr_code_{deck_id}'
@@ -335,69 +336,22 @@ def add_voucher(request, deck_id):
     voucher_code = VoucherService.generate_voucher()
     
     if voucher_code:
-        db.apply_voucher_to_deck(str(request.user.id), str(deck_id), voucher_code)
+        image_result = VoucherService.generate_and_convert_voucher_image(voucher_code)
+        voucher_image_url = image_result.get('converted_url') if image_result else None
+        voucher_image_key = image_result.get('converted_key') if image_result else None
+
+        if image_result is None:
+            logger.warning(
+                "Voucher image generation/conversion failed for deck %s. Applying code without image.",
+                deck_id,
+            )
+
+        db.apply_voucher_to_deck(
+            str(request.user.id),
+            str(deck_id),
+            voucher_code,
+            voucher_image_url=voucher_image_url,
+            voucher_image_key=voucher_image_key,
+        )
         
     return redirect('deck_detail', deck_id=deck_id)
-
-
-def test_db_connection(request):
-    """
-    Temporary view to test database connectivity and return specific errors.
-    """
-    import os
-    import boto3
-    from django.db import connections
-    from django.http import HttpResponse
-
-    # Test 1: PostgreSQL
-    pg_status = "UNKNOWN"
-    pg_error = ""
-    try:
-        db_conn = connections['default']
-        db_conn.cursor()
-        host = db_conn.settings_dict.get('HOST', 'UNKNOWN')
-        pg_status = f"SUCCESS (Connected to {host})"
-    except Exception as e:
-        env_var = os.environ.get('DATABASE_URL', 'NOT SET')
-        if env_var != 'NOT SET':
-            env_var_preview = env_var[:25] + '...'
-        else:
-            env_var_preview = 'NOT SET'
-        pg_status = "FAILURE"
-        pg_error = f"Error: {str(e)}<br>Type: {type(e).__name__}<br>Env Var: {env_var_preview}"
-
-    # Test 2: DynamoDB
-    dynamo_status = "UNKNOWN"
-    dynamo_error = ""
-    try:
-        region = os.environ.get('AWS_REGION', 'eu-west-1')
-        table_name = os.environ.get('DYNAMODB_TABLE_NAME', 'decks-db')
-        dynamodb = boto3.resource('dynamodb', region_name=region)
-        table = dynamodb.Table(table_name)
-        # Try to scan just 1 item to prove access
-        response = table.scan(Limit=1)
-        dynamo_status = f"SUCCESS (Table: {table_name}, Count: {response['Count']})"
-    except Exception as e:
-        dynamo_status = "FAILURE"
-        dynamo_error = f"Error: {str(e)}<br>Type: {type(e).__name__}"
-
-    html = f"""
-    <html>
-    <body>
-        <h1>System Health Check</h1>
-        
-        <h2>1. PostgreSQL (Supabase)</h2>
-        <p>Status: {pg_status}</p>
-        <p>{pg_error}</p>
-        
-        <h2>2. DynamoDB (AWS)</h2>
-        <p>Status: {dynamo_status}</p>
-        <p>{dynamo_error}</p>
-        
-        <h2>Environment</h2>
-        <p>AWS_REGION: {os.environ.get('AWS_REGION', 'NOT SET')}</p>
-        <p>DYNAMODB_TABLE_NAME: {os.environ.get('DYNAMODB_TABLE_NAME', 'NOT SET')}</p>
-    </body>
-    </html>
-    """
-    return HttpResponse(html)

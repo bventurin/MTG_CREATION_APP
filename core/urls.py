@@ -16,11 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
-from deck_builder import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('deck_builder.urls')),
     path('recommendations/', include('card_recommender.urls')),
-    path('test-db/', views.test_db_connection, name='test_db_debug'),
 ]

@@ -25,6 +25,9 @@ jobs:
 
           pip install -r requirements.txt
 
+      - name: Run Django system checks
+        run: python manage.py check
+
   deploy:
     name: Deploy to Elastic Beanstalk
     needs: [test]
@@ -49,8 +52,10 @@ jobs:
               Namespace=aws:elasticbeanstalk:application:environment,OptionName=GEMINI_API_KEY,Value="${{ secrets.GEMINI_API_KEY }}" \
               Namespace=aws:elasticbeanstalk:application:environment,OptionName=QR_CODE_ENDPOINT,Value="${{ secrets.QR_CODE_ENDPOINT }}" \
               Namespace=aws:elasticbeanstalk:application:environment,OptionName=VOUCHER_SERVICE_ENDPOINT,Value="${{ secrets.VOUCHER_SERVICE_ENDPOINT }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=FILECONVERT_API_BASE_URL,Value="${{ secrets.FILECONVERT_API_BASE_URL }}" \
               Namespace=aws:elasticbeanstalk:application:environment,OptionName=SECRET_KEY,Value="${{ secrets.DJANGO_SECRET_KEY }}" \
-              Namespace=aws:elasticbeanstalk:application:environment,OptionName=AWS_S3_BUCKET_NAME,Value="magic-card-data"
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=AWS_S3_BUCKET_NAME,Value="magic-card-data" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=VOUCHER_IMAGE_TEMP_DIR,Value="/tmp"
 
       - name: Wait for environment to be ready
         run: |
