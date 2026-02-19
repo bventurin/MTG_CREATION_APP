@@ -129,8 +129,6 @@ class DynamoDBService:
         user_id,
         deck_id,
         voucher_code,
-        voucher_image_url=None,
-        voucher_image_key=None,
     ):
         # Apply a voucher to a deck.
         timestamp = datetime.now().isoformat()
@@ -142,17 +140,9 @@ class DynamoDBService:
             ":updated": timestamp,
         }
 
-        if voucher_image_url:
-            update_expression += ", voucher_image_url = :image_url"
-            expression_attribute_values[":image_url"] = voucher_image_url
-
-        if voucher_image_key:
-            update_expression += ", voucher_image_key = :image_key"
-            expression_attribute_values[":image_key"] = voucher_image_key
-
         self.table.update_item(
             Key={"pk": f"USER#{user_id}", "sk": f"DECK#{deck_id}"},
-            # Sets voucher_code and voucher_discount (20%) and optional voucher image metadata on the deck item.
+            # Sets voucher_code and voucher_discount (20%) on the deck item.
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_attribute_values,
         )

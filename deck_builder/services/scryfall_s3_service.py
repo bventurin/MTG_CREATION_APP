@@ -107,19 +107,6 @@ class ScryfallS3Service:
             _cards_index = _build_index(self.get_all_cards())
         return _cards_index
 
-    def get_sync_metadata(self) -> Dict:
-        # Fetch metadata about the latest sync from Lambda.
-        try:
-            metadata_key = f"scryfall/{self.bulk_type}/sync_metadata.json"
-            response = s3_client.get_object(Bucket=self.bucket_name, Key=metadata_key)
-            metadata = json.loads(response["Body"].read())
-            return metadata
-        except s3_client.exceptions.NoSuchKey:
-            logger.warning(f"Sync metadata not found at {metadata_key}")
-            return None
-        except Exception as e:
-            logger.error(f"Error fetching metadata: {str(e)}")
-            return None
 
     def get_all_cards(self) -> List[Dict]:
         # Fetch all cards from the latest bulk data file in S3 with application-level caching.
@@ -136,28 +123,13 @@ class ScryfallS3Service:
         logger.info(f"Cache miss for {cache_key}, fetching from S3...")
         cards = _get_all_cards_cached(self.bucket_name, self.bulk_type)
 
-        # Store in cache for 1 hour (3600 seconds)
+        # Store in cache for 24 hours (86400 seconds) since the AWS Lambda only updates daily
         if cards:
-            cache.set(cache_key, cards, 3600)
-            logger.info(f"Cached {len(cards)} cards for 1 hour")
+            cache.set(cache_key, cards, 86400)
+            logger.info(f"Cached {len(cards)} cards for 24 hours")
 
         return cards
 
-    def search_cards(self, query: str) -> List[Dict]:
-        # Search cards by name, type, or oracle text.
-        cards = self.get_all_cards()
-        query_lower = query.lower()
-
-        results = []
-        for card in cards:
-            if query_lower in card.get("name", "").lower():
-                results.append(card)
-            elif query_lower in card.get("type_line", "").lower():
-                results.append(card)
-            elif query_lower in card.get("oracle_text", "").lower():
-                results.append(card)
-
-        return results
 
     def get_card_by_name(self, name: str) -> Optional[Dict]:
         # Get a single card by name using O(1) index lookup.
@@ -197,18 +169,16 @@ class ScryfallS3Service:
                 index[name_lower] = card_data
                 logger.info(f"Fetched '{name}' from Scryfall API (not in S3 bulk data)")
                 return card_data
+            else:
+                # Cache the failure so we don't spam the API on subsequent loops (HTTP 429 risk)
+                index[name_lower] = None
         except Exception as e:
             logger.warning(f"Scryfall API fallback failed for '{name}': {e}")
+            # Cache the failure to prevent timeout delays on every request
+            index[name_lower] = None
 
         return None
 
-    def get_card_by_scryfall_id(self, scryfall_id: str) -> Optional[Dict]:
-        # Get a single card by Scryfall ID.
-        cards = self.get_all_cards()
-        for card in cards:
-            if card.get("id") == scryfall_id:
-                return card
-        return None
 
     @staticmethod
     def get_card_image_url(card: Dict, format: str = "normal") -> Optional[str]:
@@ -242,33 +212,3 @@ class ScryfallS3Service:
             mana_cost = card["card_faces"][0].get("mana_cost", "")
         return mana_cost
 
-    @staticmethod
-    def format_card_for_display(card: Dict) -> Dict:
-        # Format card data for frontend display.
-        # Pulls mana_cost and oracle_text from card_faces[0] for multiface cards.
-        mana_cost = ScryfallS3Service.get_card_mana_cost(card)
-        oracle_text = card.get("oracle_text", "")
-        if not oracle_text and card.get("card_faces"):
-            oracle_text = card["card_faces"][0].get("oracle_text", "")
-
-        return {
-            "id": card.get("id"),
-            "name": card.get("name"),
-            "mana_cost": mana_cost,
-            "type_line": card.get("type_line"),
-            "oracle_text": oracle_text,
-            "power": card.get("power"),
-            "toughness": card.get("toughness"),
-            "colors": card.get("colors", []),
-            "color_identity": card.get("color_identity", []),
-            "set": card.get("set"),
-            "released_at": card.get("released_at"),
-            "image_url": ScryfallS3Service.get_card_image_url(card, "normal"),
-            "image_url_large": ScryfallS3Service.get_card_image_url(card, "large"),
-        }
-
-    @staticmethod
-    def clear_index():
-        # Clear the global index (useful for testing or manual refresh).
-        global _cards_index
-        _cards_index = None
