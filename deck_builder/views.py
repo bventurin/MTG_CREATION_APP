@@ -24,7 +24,9 @@ def parse_deck_list(text):
                with keys: card_name, quantity, is_sideboard
     """
     deck_name = None
-    cards_data = []
+    # Use a dict to group identical cards and sum their quantities
+    # Key: (card_name, is_sideboard) -> Value: quantity
+    grouped_cards = {}
     lines = text.strip().split("\n")
     current_section = None
 
@@ -59,13 +61,20 @@ def parse_deck_list(text):
             quantity = int(match.group(1))
             card_name = match.group(2).strip()
             is_sideboard = current_section == "sideboard"
-            cards_data.append(
-                {
-                    "card_name": card_name,
-                    "quantity": quantity,
-                    "is_sideboard": is_sideboard,
-                }
-            )
+            
+            # Group cards that have the same name and section, sum their quantities
+            key = (card_name, is_sideboard)
+            grouped_cards[key] = grouped_cards.get(key, 0) + quantity
+
+    # Convert grouped dict back to the list of dictionaries format
+    cards_data = [
+        {
+            "card_name": name,
+            "quantity": qty,
+            "is_sideboard": is_side_board,
+        }
+        for (name, is_side_board), qty in grouped_cards.items()
+    ]
 
     return deck_name, cards_data
 
