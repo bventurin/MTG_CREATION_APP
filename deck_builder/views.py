@@ -356,22 +356,10 @@ def add_voucher(request, deck_id):
     voucher_code = VoucherService.generate_voucher()
 
     if voucher_code:
-        image_result = VoucherService.generate_and_convert_voucher_image(voucher_code)
-        voucher_image_url = image_result.get("converted_url") if image_result else None
-        voucher_image_key = image_result.get("converted_key") if image_result else None
-
-        if image_result is None:
-            logger.warning(
-                "Voucher image generation/conversion failed for deck %s. Applying code without image.",
-                deck_id,
-            )
-
         db.apply_voucher_to_deck(
             str(request.user.id),
             str(deck_id),
-            voucher_code,
-            voucher_image_url=voucher_image_url,
-            voucher_image_key=voucher_image_key,
+            voucher_code
         )
 
     return redirect("deck_detail", deck_id=deck_id)

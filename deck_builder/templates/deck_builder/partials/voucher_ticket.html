@@ -1,0 +1,42 @@
+<!-- Voucher Ticket Component -->
+<div class="d-flex flex-column align-items-end gap-2">
+    <!-- Visual Ticket to be screenshotted -->
+    <div id="voucher-ticket" class="p-4 rounded shadow-sm position-relative text-start border border-success"
+        style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #f8fafc; width: 450px; overflow: hidden;">
+        <div class="position-absolute top-0 start-0 w-100" style="height: 4px; background: #10b981;"></div>
+
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+                <h4 class="mb-0 text-success fw-bold" style="letter-spacing: 1px;">AETHERFLOW</h4>
+                <small class="text-muted text-uppercase" style="font-size: 0.7rem;">Magic: The Gathering</small>
+            </div>
+            <span class="badge bg-success bg-opacity-25 text-success border border-success">PROMO VOUCHER</span>
+        </div>
+
+        <div
+            class="py-3 mb-3 border-top border-bottom border-secondary border-opacity-50 text-center bg-dark bg-opacity-50 rounded">
+            <span class="text-secondary d-block mb-1" style="font-size: 0.8rem; letter-spacing: 2px;">YOUR EXCLUSIVE
+                CODE</span>
+            <code class="fs-2 fw-bold text-white tracking-widest">{{ voucher_code }}</code>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-end">
+            <p class="mb-0 text-secondary" style="font-size: 0.85rem; max-width: 250px;">
+                Enjoy <strong class="text-success">20% OFF</strong> your deck total using this code at checkout.
+            </p>
+            <small class="text-muted text-end" style="font-size: 0.7rem;">
+                Valid one-time use.<br>
+            </small>
+        </div>
+    </div>
+
+    <!-- Download Actions -->
+    <div class="mt-2 text-end w-100">
+        <button id="download-voucher-btn" class="btn btn-success">
+            <i class="bi bi-download me-2"></i>Download Voucher
+        </button>
+        <small class="d-block mt-1 text-muted">
+            Rendered securely in your browser
+        </small>
+    </div>
+</div>
