@@ -6,35 +6,50 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('deck_builder', '0001_initial'),
+        ("deck_builder", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='deckcard',
-            name='scryfall_id',
+            model_name="deckcard",
+            name="scryfall_id",
             field=models.UUIDField(blank=True, null=True),
         ),
         migrations.CreateModel(
-            name='Card',
+            name="Card",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('scryfall_id', models.UUIDField(db_index=True, unique=True)),
-                ('name', models.CharField(db_index=True, max_length=255)),
-                ('mana_cost', models.CharField(blank=True, max_length=50)),
-                ('type_line', models.CharField(blank=True, db_index=True, max_length=255)),
-                ('oracle_text', models.TextField(blank=True)),
-                ('image_url', models.URLField(blank=True)),
-                ('set_code', models.CharField(db_index=True, max_length=10)),
-                ('color_identity', models.CharField(blank=True, max_length=20)),
-                ('power', models.CharField(blank=True, max_length=10)),
-                ('toughness', models.CharField(blank=True, max_length=10)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("scryfall_id", models.UUIDField(db_index=True, unique=True)),
+                ("name", models.CharField(db_index=True, max_length=255)),
+                ("mana_cost", models.CharField(blank=True, max_length=50)),
+                (
+                    "type_line",
+                    models.CharField(blank=True, db_index=True, max_length=255),
+                ),
+                ("oracle_text", models.TextField(blank=True)),
+                ("image_url", models.URLField(blank=True)),
+                ("set_code", models.CharField(db_index=True, max_length=10)),
+                ("color_identity", models.CharField(blank=True, max_length=20)),
+                ("power", models.CharField(blank=True, max_length=10)),
+                ("toughness", models.CharField(blank=True, max_length=10)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'ordering': ['name'],
-                'indexes': [models.Index(fields=['name', 'set_code'], name='deck_builde_name_9d19d6_idx')],
+                "ordering": ["name"],
+                "indexes": [
+                    models.Index(
+                        fields=["name", "set_code"], name="deck_builde_name_9d19d6_idx"
+                    )
+                ],
             },
         ),
     ]

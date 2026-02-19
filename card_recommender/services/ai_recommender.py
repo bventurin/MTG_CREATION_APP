@@ -13,31 +13,31 @@ class DeckRecommendationAgent:
             return
 
         self._client = genai.Client(api_key=api_key)
-    
+
     def _get_response_text(self, response):
         # Extract JSON from Gemini API response
         # Get text from candidates
-        if hasattr(response, 'candidates') and response.candidates:
+        if hasattr(response, "candidates") and response.candidates:
             candidate = response.candidates[0]
-            if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+            if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
                 text_parts = []
                 for part in candidate.content.parts:
-                    if hasattr(part, 'text') and part.text:
+                    if hasattr(part, "text") and part.text:
                         text_parts.append(part.text)
                 if text_parts:
                     return "".join(text_parts)
-        
+
         # Fallback to response.text
-        if hasattr(response, 'text') and response.text:
+        if hasattr(response, "text") and response.text:
             return response.text
-        
+
         return None
 
     def _parse_recommendations(self, text):
         # Parse JSON from model output, which may be wrapped in markdown
         if not text:
             return []
-            
+
         try:
             # Strip markdown code blocks if present
             if "```json" in text:
@@ -46,15 +46,15 @@ class DeckRecommendationAgent:
                 text = text.split("```")[1].split("```")[0].strip()
 
             # Find the start of the JSON content
-            start_index = text.find('{')
+            start_index = text.find("{")
             if start_index == -1:
                 return []
-            
+
             # Find the matching '}' for the found '{'
-            end_index = text.rfind('}')
+            end_index = text.rfind("}")
             if end_index == -1:
                 return []
-            
+
             json_text = text[start_index : end_index + 1]
             data = json.loads(json_text)
             return data.get("cards", [])
@@ -63,45 +63,43 @@ class DeckRecommendationAgent:
         except Exception as e:
             print(f"DeckRecommendationAgent: Parse error: {e}")
             return []
-    
+
     def get_deck_improvement_recommendations(self, deck_cards, format_name="standard"):
         # Analyze an existing deck and recommend 3 cards that would improve it
         if not self._client:
             print("DeckRecommendationAgent: No API client (check GEMINI_API_KEY).")
             return []
-        
+
         if not deck_cards:
             return []
-        
+
         # Create a concise deck summary
         deck_list = ", ".join(deck_cards[:20])
         if len(deck_cards) > 20:
             deck_list += f"... ({len(deck_cards) - 20} more)"
-        
+
         prompt = (
             f"Analyze this {format_name} MTG deck: {deck_list}. "
             "Recommend 3 cards to improve synergy, fill gaps, or strengthen strategy. "
             "Cards must be legal in the format and complement the deck's theme. "
             "Return ONLY raw JSON, no markdown, no explanation. "
-            "JSON format: {\"cards\": [\"Card Name\", \"Card Name\", \"Card Name\"]}"
+            'JSON format: {"cards": ["Card Name", "Card Name", "Card Name"]}'
         )
-        
+
         generation_config = types.GenerateContentConfig(
             temperature=0.3,
             max_output_tokens=1024,
         )
-        
+
         try:
             response = self._client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config=generation_config
+                model="gemini-2.5-flash", contents=prompt, config=generation_config
             )
-            
+
             response_text = self._get_response_text(response)
             if not response_text:
                 return []
-            
+
             return self._parse_recommendations(response_text)
         except Exception as e:
             print(f"DeckRecommendationAgent: AI generation failed. Error: {e}")

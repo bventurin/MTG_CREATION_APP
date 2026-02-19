@@ -5,45 +5,49 @@ import logging
 from datetime import datetime
 from pathlib import Path
 import uuid
-from PIL import Image, ImageDraw, ImageFont 
+from PIL import Image, ImageDraw, ImageFont
+
 logger = logging.getLogger(__name__)
+
 
 class VoucherService:
     @staticmethod
     def generate_voucher():
-        
-        #Calls the external Voucher API to generate a new voucher code.
-        
-        url = os.environ.get('VOUCHER_SERVICE_ENDPOINT')
+
+        # Calls the external Voucher API to generate a new voucher code.
+
+        url = os.environ.get("VOUCHER_SERVICE_ENDPOINT")
         if not url:
             logger.error("VOUCHER_SERVICE_ENDPOINT environment variable not set")
             return None
-            
+
         try:
             # The API expects a POST request with an empty JSON body
             response = requests.post(url, json={}, timeout=10)
             response.raise_for_status()
-            
+
             response_text = response.text
-            
+
             # Extract ID
             match = re.search(r"voucher ID is '([^']+)'", response_text)
             if match:
                 return match.group(1)
             else:
-                logger.error(f"Could not extract voucher ID from response: {response_text}")
+                logger.error(
+                    f"Could not extract voucher ID from response: {response_text}"
+                )
                 return None
-                
+
         except requests.RequestException as e:
             logger.error(f"Error calling Voucher API: {str(e)}")
             return None
 
     @classmethod
     def _fileconvert_base_url(cls):
-        url = os.environ.get('FILECONVERT_API_BASE_URL')
+        url = os.environ.get("FILECONVERT_API_BASE_URL")
         if not url:
             raise ValueError("FILECONVERT_API_BASE_URL environment variable not set")
-        return url.rstrip('/')
+        return url.rstrip("/")
 
     @staticmethod
     def _load_font(size):
@@ -56,14 +60,14 @@ class VoucherService:
     @staticmethod
     def _build_voucher_image(voucher_code):
         """Create a local JPEG voucher image and return file path + mime type."""
-        temp_dir = Path(os.environ.get('VOUCHER_IMAGE_TEMP_DIR', '/tmp'))
+        temp_dir = Path(os.environ.get("VOUCHER_IMAGE_TEMP_DIR", "/tmp"))
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         filename = f"voucher_{voucher_code}_{uuid.uuid4().hex[:8]}.jpg"
         file_path = temp_dir / filename
 
         width, height = 1200, 630
-        image = Image.new('RGB', (width, height), color=(24, 24, 27))
+        image = Image.new("RGB", (width, height), color=(24, 24, 27))
         draw = ImageDraw.Draw(image)
 
         title_font = VoucherService._load_font(48)
@@ -71,14 +75,29 @@ class VoucherService:
         code_font = VoucherService._load_font(64)
 
         draw.text((60, 70), "Magic Deck Voucher", fill=(255, 255, 255), font=title_font)
-        draw.rectangle((60, 180, width - 60, 380), fill=(34, 197, 94), outline=(16, 185, 129), width=4)
+        draw.rectangle(
+            (60, 180, width - 60, 380),
+            fill=(34, 197, 94),
+            outline=(16, 185, 129),
+            width=4,
+        )
         draw.text((90, 210), "Voucher Code", fill=(20, 20, 20), font=body_font)
         draw.text((90, 275), voucher_code, fill=(0, 0, 0), font=code_font)
-        draw.text((60, 460), f"Generated at {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}", fill=(163, 163, 163), font=body_font)
-        draw.text((60, 510), "Use this voucher to get 20% off your deck total.", fill=(214, 211, 209), font=body_font)
+        draw.text(
+            (60, 460),
+            f"Generated at {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}",
+            fill=(163, 163, 163),
+            font=body_font,
+        )
+        draw.text(
+            (60, 510),
+            "Use this voucher to get 20% off your deck total.",
+            fill=(214, 211, 209),
+            font=body_font,
+        )
 
-        image.save(file_path, format='JPEG', quality=92)
-        return str(file_path), 'image/jpeg'
+        image.save(file_path, format="JPEG", quality=92)
+        return str(file_path), "image/jpeg"
 
     @classmethod
     def _get_upload_url(cls, filename, content_type):
@@ -89,29 +108,31 @@ class VoucherService:
         response = requests.get(
             endpoint,
             params={
-                'filename': filename,
-                'content_type': content_type,
+                "filename": filename,
+                "content_type": content_type,
             },
             timeout=20,
         )
         response.raise_for_status()
 
         payload = response.json()
-        required_fields = ['upload_url', 'download_url', 'file_key']
+        required_fields = ["upload_url", "download_url", "file_key"]
         missing = [field for field in required_fields if field not in payload]
         if missing:
-            raise ValueError(f"Upload API response missing fields: {', '.join(missing)}")
+            raise ValueError(
+                f"Upload API response missing fields: {', '.join(missing)}"
+            )
 
         return payload
 
     @staticmethod
     def _upload_binary_file(upload_url, file_path, content_type):
         """Step 2: upload raw binary to the presigned S3 URL with PUT."""
-        with open(file_path, 'rb') as file_obj:
+        with open(file_path, "rb") as file_obj:
             put_response = requests.put(
                 upload_url,
                 data=file_obj,
-                headers={'Content-Type': content_type},
+                headers={"Content-Type": content_type},
                 timeout=60,
             )
         put_response.raise_for_status()
@@ -125,16 +146,16 @@ class VoucherService:
         response = requests.post(
             endpoint,
             json={
-                'image_url': image_url,
-                'target_format': 'png',
+                "image_url": image_url,
+                "target_format": "png",
             },
-            headers={'Content-Type': 'application/json'},
+            headers={"Content-Type": "application/json"},
             timeout=30,
         )
         response.raise_for_status()
 
         payload = response.json()
-        if 'url' not in payload:
+        if "url" not in payload:
             raise ValueError("ConvertImage response missing 'url'")
         return payload
 
@@ -153,25 +174,27 @@ class VoucherService:
         local_file_path = None
 
         try:
-            local_file_path, source_content_type = cls._build_voucher_image(voucher_code)
+            local_file_path, source_content_type = cls._build_voucher_image(
+                voucher_code
+            )
             upload_meta = cls._get_upload_url(
                 filename=Path(local_file_path).name,
                 content_type=source_content_type,
             )
 
             cls._upload_binary_file(
-                upload_url=upload_meta['upload_url'],
+                upload_url=upload_meta["upload_url"],
                 file_path=local_file_path,
                 content_type=source_content_type,
             )
 
-            conversion_result = cls._convert_image_to_png(upload_meta['download_url'])
+            conversion_result = cls._convert_image_to_png(upload_meta["download_url"])
 
             return {
-                'source_download_url': upload_meta['download_url'],
-                'source_file_key': upload_meta['file_key'],
-                'converted_url': conversion_result.get('url'),
-                'converted_key': conversion_result.get('key'),
+                "source_download_url": upload_meta["download_url"],
+                "source_file_key": upload_meta["file_key"],
+                "converted_url": conversion_result.get("url"),
+                "converted_key": conversion_result.get("key"),
             }
         except (requests.RequestException, ValueError, OSError) as exc:
             logger.error("Voucher image upload/convert flow failed: %s", exc)
@@ -181,4 +204,6 @@ class VoucherService:
                 try:
                     os.remove(local_file_path)
                 except OSError:
-                    logger.warning("Could not delete temporary voucher image: %s", local_file_path)
+                    logger.warning(
+                        "Could not delete temporary voucher image: %s", local_file_path
+                    )
