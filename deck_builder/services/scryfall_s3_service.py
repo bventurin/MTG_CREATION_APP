@@ -161,7 +161,18 @@ class ScryfallS3Service:
 
         import time
         # Final fallback: live Scryfall API
+        # To prevent server timeout on empty S3 databases, we track fallbacks per request
+        if not hasattr(self, '_api_fallback_count'):
+            self._api_fallback_count = 0
+            
+        if self._api_fallback_count >= 10:
+            logger.warning(f"Exceeded maximum Scryfall API fallbacks (10) for this request. Skipping '{name}' to prevent server timeout. Please check your S3 bulk data configuration.")
+            # Cache failure
+            index[name_lower] = None
+            return None
+            
         try:
+            self._api_fallback_count += 1
             # Scryfall requests 50-100ms delay between requests (max 10/sec)
             time.sleep(0.1)
             resp = requests.get(
@@ -183,6 +194,7 @@ class ScryfallS3Service:
                 logger.warning(f"Card not found in Scryfall database: {name} (Status: {resp.status_code})")
                 # Cache the failure so we don't spam the API on subsequent loops
                 index[name_lower] = None
+
         except Exception as e:
             logger.warning(f"Scryfall API fallback failed for '{name}': {e}")
             # Cache the failure to prevent timeout delays on every request
