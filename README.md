@@ -12,7 +12,7 @@ Built with Django, backed by AWS DynamoDB and Supabase, and deployed on AWS Elas
 
 - 🃏 **Deck Builder** — Create, edit, and delete decks. Paste a deck list or build one card by card.
 - 🤖 **AI Recommendations** — Uses Google Gemini to analyse your deck and suggest 3 cards that would improve it.
--  **QR Code Sharing** — Generate a QR code for any deck so you can share it easily.
+- 🧑🏽‍💻 **QR Code Sharing** — Generate a QR code for any deck so you can share it easily.
 - 🎟️ **Vouchers** — Generate and attach vouchers to your decks, powered by an external voucher service.
 - 🔐 **User Accounts** — Sign up, log in, and manage your own collection of decks.
 
@@ -92,16 +92,3 @@ The CI pipeline:
 
 Sensitive config (database URL, API keys, etc.) is stored in **GitHub Actions Secrets** — never hardcoded in the repo.
 
-## Environment Variables
-
-All secrets are managed through GitHub Actions and injected into Elastic Beanstalk at deploy time. You'll need these set up in your repo's **Settings → Secrets → Actions**:
-
-| Secret | Description |
-|---|---|
-| `AWS_ACCESS_KEY_ID` | AWS IAM credentials for deployment |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM credentials for deployment |
-| `DATABASE_URL` | Supabase PostgreSQL connection string (user accounts) |
-| `GEMINI_API_KEY` | Google Gemini API key for AI recommendations |
-| `DJANGO_SECRET_KEY` | Django secret key for production |
-| `QR_CODE_ENDPOINT` | API Gateway URL for QR code generation |
-| `VOUCHER_SERVICE_ENDPOINT` | API Gateway URL for voucher service |
