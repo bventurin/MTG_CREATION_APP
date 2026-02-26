@@ -48,7 +48,9 @@ def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
         )
         return []
     except Exception as e:
-        logger.error(f"Error fetching cards from S3: {str(e)}")
+        logger.error(f"Error fetching cards from S3: {type(e).__name__}: {str(e)}")
+        # Log bucket and region to help debug configuration issues
+        logger.error(f"S3 Context: Bucket={bucket_name}, Region={os.getenv('AWS_REGION')}")
         return []
 
 
@@ -104,7 +106,12 @@ class ScryfallS3Service:
         # Return (and lazily build) the global name index.
         global _cards_index
         if _cards_index is None:
-            _cards_index = _build_index(self.get_all_cards())
+            cards = self.get_all_cards()
+            if not cards:
+                logger.warning("Empty card list from get_all_cards, creating empty index to prevent repeated S3 failures")
+                _cards_index = {}
+            else:
+                _cards_index = _build_index(cards)
         return _cards_index
 
 
