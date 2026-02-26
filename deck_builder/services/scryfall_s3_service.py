@@ -1,21 +1,42 @@
 """
 Service to fetch and cache Scryfall card data from S3.
+Uses streaming JSON parsing (ijson) to avoid loading the entire
+bulk data file into memory at once.
 """
 
 import json
 import gzip
 import boto3
+import ijson
 import logging
 import os
 import requests
 import unicodedata
+import time
 from io import BytesIO
 from typing import List, Dict, Optional
 from functools import lru_cache
 from django.core.cache import cache
-from django.views.decorators.cache import cache_page
 
 logger = logging.getLogger(__name__)
+
+# Fields the application actually uses — everything else is stripped to save memory.
+NEEDED_FIELDS = {
+    "name",
+    "printed_name",
+    "flavor_name",
+    "type_line",
+    "image_uris",
+    "card_faces",
+    "mana_cost",
+    "oracle_text",
+    "colors",
+    "prices",
+    "cmc",
+}
+
+# Maximum number of Scryfall API fallback calls per request
+MAX_API_FALLBACKS = 50
 
 # Initialize S3 client using AWS credentials from environment/IAM
 s3_client = boto3.client(
@@ -24,22 +45,65 @@ s3_client = boto3.client(
 )
 
 
+def _strip_card(card: Dict) -> Dict:
+    """Keep only the fields the app needs, dramatically reducing memory."""
+    stripped = {k: v for k, v in card.items() if k in NEEDED_FIELDS}
+
+    # For card_faces, strip each face to only needed fields too
+    if "card_faces" in stripped and stripped["card_faces"]:
+        stripped["card_faces"] = [
+            {k: v for k, v in face.items() if k in NEEDED_FIELDS}
+            for face in stripped["card_faces"]
+        ]
+
+    return stripped
+
+
+def _stream_parse_cards(content: bytes) -> List[Dict]:
+    """
+    Parse cards from JSON content using ijson streaming parser.
+    Only keeps needed fields per card to minimize memory usage.
+    """
+    stream = BytesIO(content)
+    cards = []
+
+    try:
+        # ijson.items parses the top-level JSON array one item at a time
+        for card in ijson.items(stream, "item"):
+            cards.append(_strip_card(card))
+    except Exception as e:
+        logger.error(f"Streaming JSON parse error: {type(e).__name__}: {e}")
+        # Return whatever we managed to parse
+        if cards:
+            logger.warning(f"Partial parse: recovered {len(cards)} cards before error")
+
+    return cards
+
+
 @lru_cache(maxsize=1)
 def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
-    # Cached function to fetch all cards from S3 (only loads once per bucket/type combo).
+    """Fetch all cards from S3, streaming the JSON to avoid MemoryError."""
     try:
         data_key = f"scryfall/{bulk_type}/latest.json"
         logger.info(f"Loading cards from S3: s3://{bucket_name}/{data_key}")
 
         response = s3_client.get_object(Bucket=bucket_name, Key=data_key)
-        content = response["Body"].read()
+
+        # Stream the body in chunks to handle gzip detection
+        body = response["Body"].read()
 
         # Check if content is gzipped
-        if content[:2] == b"\x1f\x8b":  # gzip magic number
-            content = gzip.decompress(content)
+        if body[:2] == b"\x1f\x8b":  # gzip magic number
+            logger.info("Decompressing gzipped S3 data...")
+            body = gzip.decompress(body)
 
-        cards = json.loads(content)
-        logger.info(f"Successfully loaded {len(cards)} cards from S3")
+        logger.info(f"S3 data size: {len(body) / (1024*1024):.1f} MB, parsing with streaming parser...")
+        cards = _stream_parse_cards(body)
+
+        # Free the raw bytes
+        del body
+
+        logger.info(f"Successfully loaded and stripped {len(cards)} cards from S3")
         return cards
 
     except s3_client.exceptions.NoSuchKey:
@@ -47,9 +111,12 @@ def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
             f"Card data not found at s3://{bucket_name}/scryfall/{bulk_type}/latest.json"
         )
         return []
+    except MemoryError:
+        logger.error("MemoryError while loading S3 data — instance has insufficient RAM")
+        logger.error(f"S3 Context: Bucket={bucket_name}, Region={os.getenv('AWS_REGION')}")
+        return []
     except Exception as e:
         logger.error(f"Error fetching cards from S3: {type(e).__name__}: {str(e)}")
-        # Log bucket and region to help debug configuration issues
         logger.error(f"S3 Context: Bucket={bucket_name}, Region={os.getenv('AWS_REGION')}")
         return []
 
@@ -59,7 +126,7 @@ _cards_index = None
 
 
 def _build_index(cards: List[Dict]) -> Dict[str, Dict]:
-    # Build a name -> card dictionary for O(1) lookups.
+    """Build a name -> card dictionary for O(1) lookups."""
     index = {}
     for card in cards:
         card_name = card.get("name", "").lower().strip()
@@ -82,7 +149,7 @@ def _build_index(cards: List[Dict]) -> Dict[str, Dict]:
 
 
 def _string_similarity(a: str, b: str) -> float:
-    # Simple positional character similarity score.
+    """Simple positional character similarity score."""
     if a == b:
         return 1.0
     if len(a) == 0 or len(b) == 0:
@@ -92,7 +159,7 @@ def _string_similarity(a: str, b: str) -> float:
 
 
 class ScryfallS3Service:
-    # Service to interact with Scryfall card data stored in S3.
+    """Service to interact with Scryfall card data stored in S3."""
 
     def __init__(
         self, bucket_name: Optional[str] = None, bulk_type: str = "default_cards"
@@ -103,21 +170,22 @@ class ScryfallS3Service:
         self.bulk_type = bulk_type
 
     def _get_index(self) -> Dict[str, Dict]:
-        # Return (and lazily build) the global name index.
+        """Return (and lazily build) the global name index."""
         global _cards_index
         if _cards_index is None:
             cards = self.get_all_cards()
             if not cards:
-                logger.warning("Empty card list from get_all_cards, creating empty index to prevent repeated S3 failures")
+                logger.warning(
+                    "Empty card list from get_all_cards, creating empty index "
+                    "to prevent repeated S3 failures"
+                )
                 _cards_index = {}
             else:
                 _cards_index = _build_index(cards)
         return _cards_index
 
-
     def get_all_cards(self) -> List[Dict]:
-        # Fetch all cards from the latest bulk data file in S3 with application-level caching.
-        # Cache key includes bucket and type to support multiple datasets
+        """Fetch all cards from S3 with application-level caching."""
         cache_key = f"scryfall_cards_{self.bucket_name}_{self.bulk_type}"
 
         # Try to get from cache first
@@ -130,17 +198,17 @@ class ScryfallS3Service:
         logger.info(f"Cache miss for {cache_key}, fetching from S3...")
         cards = _get_all_cards_cached(self.bucket_name, self.bulk_type)
 
-        # Store in cache for 24 hours (86400 seconds) since the AWS Lambda only updates daily
+        # Store in cache for 24 hours (86400 seconds) since the Lambda only updates daily
         if cards:
             cache.set(cache_key, cards, 86400)
             logger.info(f"Cached {len(cards)} cards for 24 hours")
 
         return cards
 
-
     def get_card_by_name(self, name: str) -> Optional[Dict]:
-        # Get a single card by name using O(1) index lookup.
-        # Falls back to: normalized chars, fuzzy match, then live Scryfall API.
+        """Get a single card by name using O(1) index lookup.
+        Falls back to: normalized chars, fuzzy match, then live Scryfall API.
+        """
         index = self._get_index()
         name_lower = name.lower().strip()
 
@@ -158,7 +226,7 @@ class ScryfallS3Service:
         for indexed_name, card in index.items():
             if card is None:
                 continue
-                
+
             if (
                 name_lower in indexed_name
                 or indexed_name in name_lower
@@ -166,18 +234,21 @@ class ScryfallS3Service:
             ):
                 return card
 
-        import time
         # Final fallback: live Scryfall API
-        # To prevent server timeout on empty S3 databases, we track fallbacks per request
+        # Track fallbacks per request to prevent server timeout
         if not hasattr(self, '_api_fallback_count'):
             self._api_fallback_count = 0
-            
-        if self._api_fallback_count >= 10:
-            logger.warning(f"Exceeded maximum Scryfall API fallbacks (10) for this request. Skipping '{name}' to prevent server timeout. Please check your S3 bulk data configuration.")
+
+        if self._api_fallback_count >= MAX_API_FALLBACKS:
+            logger.warning(
+                f"Exceeded maximum Scryfall API fallbacks ({MAX_API_FALLBACKS}) "
+                f"for this request. Skipping '{name}' to prevent server timeout. "
+                f"Please check your S3 bulk data configuration."
+            )
             # Cache failure
             index[name_lower] = None
             return None
-            
+
         try:
             self._api_fallback_count += 1
             # Scryfall requests 50-100ms delay between requests (max 10/sec)
@@ -188,7 +259,7 @@ class ScryfallS3Service:
                 timeout=5,
             )
             if resp.status_code == 200:
-                card_data = resp.json()
+                card_data = _strip_card(resp.json())
                 # Cache it for future lookups
                 index[name_lower] = card_data
                 logger.info(f"Fetched '{name}' from Scryfall API (not in S3 bulk data)")
@@ -198,7 +269,10 @@ class ScryfallS3Service:
                 # Don't cache None for rate limits, so we can try again next time!
                 return None
             else:
-                logger.warning(f"Card not found in Scryfall database: {name} (Status: {resp.status_code})")
+                logger.warning(
+                    f"Card not found in Scryfall database: {name} "
+                    f"(Status: {resp.status_code})"
+                )
                 # Cache the failure so we don't spam the API on subsequent loops
                 index[name_lower] = None
 
@@ -209,11 +283,11 @@ class ScryfallS3Service:
 
         return None
 
-
     @staticmethod
     def get_card_image_url(card: Dict, format: str = "normal") -> Optional[str]:
-        # Extract image URL from card object.
-        # Falls back to card_faces[0] for multiface cards (DFCs, split, flip).
+        """Extract image URL from card object.
+        Falls back to card_faces[0] for multiface cards (DFCs, split, flip).
+        """
         image_uris = card.get("image_uris")
         if not image_uris and card.get("card_faces"):
             image_uris = card["card_faces"][0].get("image_uris", {})
@@ -221,7 +295,7 @@ class ScryfallS3Service:
 
     @staticmethod
     def get_card_price(card: Dict) -> float:
-        # Extract price with fallback: usd -> usd_foil -> eur -> tix
+        """Extract price with fallback: usd -> usd_foil -> eur -> tix"""
         prices = card.get("prices", {})
         usd_price = (
             prices.get("usd")
@@ -236,9 +310,8 @@ class ScryfallS3Service:
 
     @staticmethod
     def get_card_mana_cost(card: Dict) -> str:
-        # Get mana_cost with card_faces fallback for multiface cards
+        """Get mana_cost with card_faces fallback for multiface cards"""
         mana_cost = card.get("mana_cost", "")
         if not mana_cost and card.get("card_faces"):
             mana_cost = card["card_faces"][0].get("mana_cost", "")
         return mana_cost
-

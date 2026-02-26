@@ -26,6 +26,7 @@ httpcore==1.0.9
 httplib2==0.31.2
 httpx==0.28.1
 idna==3.11
+ijson==3.3.0
 jmespath==1.1.0
 packaging==26.0
 Pillow==11.3.0
