@@ -102,7 +102,7 @@ def get_deck_metadata(cards_data: List[Dict]) -> Dict:
 
     for card_info in cards_data:
         card_name = card_info.get("card_name")
-        card_data = scryfall_service.get_card_by_name(card_name)
+        card_data = scryfall_service.get_card_by_name(card_name, allow_api_fallback=False)
 
         if not card_data:
             continue

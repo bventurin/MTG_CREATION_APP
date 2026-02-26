@@ -205,16 +205,24 @@ class ScryfallS3Service:
 
         return cards
 
-    def get_card_by_name(self, name: str) -> Optional[Dict]:
+    def get_card_by_name(self, name: str, allow_api_fallback: bool = True) -> Optional[Dict]:
         """Get a single card by name using O(1) index lookup.
         Falls back to: normalized chars, fuzzy match, then live Scryfall API.
+
+        Args:
+            allow_api_fallback: If False, skip the live Scryfall API call.
+                Use False for bulk operations (home page, deck list) to
+                avoid slow API calls for every missing card.
         """
         index = self._get_index()
         name_lower = name.lower().strip()
 
-        # O(1) exact match
+        # O(1) exact match — skip cached failures (None) so the API
+        # fallback can be retried on the next request
         if name_lower in index:
-            return index[name_lower]
+            cached = index[name_lower]
+            if cached is not None:
+                return cached
 
         # Try without accented characters (e.g. "Æ" -> "A")
         normalized = unicodedata.normalize("NFD", name_lower)
@@ -235,6 +243,9 @@ class ScryfallS3Service:
                 return card
 
         # Final fallback: live Scryfall API
+        if not allow_api_fallback:
+            return None
+
         # Track fallbacks per request to prevent server timeout
         if not hasattr(self, '_api_fallback_count'):
             self._api_fallback_count = 0
