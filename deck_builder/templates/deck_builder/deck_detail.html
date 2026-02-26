@@ -120,7 +120,7 @@
                     </thead>
                     <tbody>
                         {% for card in cards %}
-                        <tr class="card-row" data-image="{{ card.image_url }}">
+                        <tr class="card-row" data-image="{{ card.image_url|default:'' }}">
                             <td class="fw-bold">{{ card.quantity }}x</td>
                             <td>
                                 <span class="card-name-hover">{{ card.card_name }}</span>
@@ -167,7 +167,7 @@
                 </thead>
                 <tbody>
                     {% for card in sideboard_flat %}
-                    <tr class="card-row" data-image="{{ card.image_url }}">
+                    <tr class="card-row" data-image="{{ card.image_url|default:'' }}">
                         <td class="fw-bold">{{ card.quantity }}x</td>
                         <td>
                             <span class="card-name-hover">{{ card.card_name }}</span>

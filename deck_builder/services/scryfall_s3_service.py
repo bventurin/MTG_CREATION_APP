@@ -217,34 +217,42 @@ class ScryfallS3Service:
         index = self._get_index()
         name_lower = name.lower().strip()
 
-        # O(1) exact match — skip cached failures (None) so the API
-        # fallback can be retried on the next request
+        # O(1) exact match
         if name_lower in index:
             cached = index[name_lower]
             if cached is not None:
                 return cached
+            # Previously failed lookup — skip expensive fuzzy match,
+            # jump straight to API retry if allowed
+            if not allow_api_fallback:
+                return None
+            # Fall through to API fallback below (skip fuzzy search)
+        else:
+            # Card not in index at all — try normalized/fuzzy before API
 
-        # Try without accented characters (e.g. "Æ" -> "A")
-        normalized = unicodedata.normalize("NFD", name_lower)
-        normalized = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
-        if normalized in index:
-            return index[normalized]
+            # Try without accented characters (e.g. "Æ" -> "A")
+            normalized = unicodedata.normalize("NFD", name_lower)
+            normalized = "".join(
+                c for c in normalized if unicodedata.category(c) != "Mn"
+            )
+            if normalized in index:
+                return index[normalized]
 
-        # Fuzzy match
-        for indexed_name, card in index.items():
-            if card is None:
-                continue
+            # Fuzzy match
+            for indexed_name, card in index.items():
+                if card is None:
+                    continue
 
-            if (
-                name_lower in indexed_name
-                or indexed_name in name_lower
-                or _string_similarity(name_lower, indexed_name) > 0.85
-            ):
-                return card
+                if (
+                    name_lower in indexed_name
+                    or indexed_name in name_lower
+                    or _string_similarity(name_lower, indexed_name) > 0.85
+                ):
+                    return card
 
-        # Final fallback: live Scryfall API
-        if not allow_api_fallback:
-            return None
+            # Not found via fuzzy either
+            if not allow_api_fallback:
+                return None
 
         # Track fallbacks per request to prevent server timeout
         if not hasattr(self, '_api_fallback_count'):

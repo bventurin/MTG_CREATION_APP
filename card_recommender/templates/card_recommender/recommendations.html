@@ -39,7 +39,7 @@
                 </thead>
                 <tbody>
                     {% for card in recommendations %}
-                    <tr class="card-row" data-image="{{ card.image_url }}">
+                    <tr class="card-row" data-image="{{ card.image_url|default:'' }}">
                         <td>
                             <input class="form-check-input" type="checkbox" name="cards" value="{{ card.name }}"
                                 id="card_{{ forloop.counter }}">
