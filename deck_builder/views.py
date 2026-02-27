@@ -155,8 +155,6 @@ def deck_detail(request, deck_id):
 
     # Calculate deck total price
     scryfall_service = ScryfallS3Service()
-    # Ensure cache is loaded
-    scryfall_service.get_all_cards()
 
     total_price = Decimal("0.00")
 

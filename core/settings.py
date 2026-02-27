@@ -164,3 +164,17 @@ STATICFILES_DIRS = [
 
 LOGIN_REDIRECT_URL = 'home'
 LOGOUT_REDIRECT_URL = 'home'
+
+# Cache Configuration
+# Use file-based cache so the Scryfall bulk card data persists across
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': '/tmp/django_cache',
+        'TIMEOUT': 86400,  # 24 hours — matches the Scryfall daily Lambda update
+        'OPTIONS': {
+            'MAX_ENTRIES': 10,  # card data is large; keep entry count low
+        },
+    }
+}
+
