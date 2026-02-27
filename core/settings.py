@@ -166,15 +166,15 @@ LOGIN_REDIRECT_URL = 'home'
 LOGOUT_REDIRECT_URL = 'home'
 
 # Cache Configuration
-# Use file-based cache so the Scryfall bulk card data persists across
+# LocMemCache is safe here because gunicorn runs a single worker (--workers=1).
+# The previous FileBasedCache + /tmp approach caused 500 errors (directory not
+# created on fresh EB instances) and a SonarCloud CWE-22 path-traversal alert.
+# With one worker, only one process ever loads the Scryfall S3 data per boot,
+# so there is no concurrent double-load risk.
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-        'LOCATION': '/tmp/django_cache',
-        'TIMEOUT': 86400,  # 24 hours — matches the Scryfall daily Lambda update
-        'OPTIONS': {
-            'MAX_ENTRIES': 10,  # card data is large; keep entry count low
-        },
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'scryfall-cards',
     }
 }
 
