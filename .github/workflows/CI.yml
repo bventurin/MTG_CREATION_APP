@@ -67,6 +67,14 @@ jobs:
               Namespace=aws:elasticbeanstalk:application:environment,OptionName=VOUCHER_SERVICE_ENDPOINT,Value="${{ secrets.VOUCHER_SERVICE_ENDPOINT }}" \
               Namespace=aws:elasticbeanstalk:application:environment,OptionName=FILECONVERT_API_BASE_URL,Value="${{ secrets.FILECONVERT_API_BASE_URL }}" \
               Namespace=aws:elasticbeanstalk:application:environment,OptionName=SECRET_KEY,Value="${{ secrets.DJANGO_SECRET_KEY }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=DD_API_KEY,Value="${{ secrets.DD_API_KEY }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=DD_SITE,Value="${{ secrets.DD_SITE }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=DD_ENV,Value="production" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=DD_SERVICE,Value="AetherFlow-app" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=DD_VERSION,Value="${{ github.sha }}" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=DD_LOGS_INJECTION,Value="true" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=DD_RUNTIME_METRICS_ENABLED,Value="true" \
+              Namespace=aws:elasticbeanstalk:application:environment,OptionName=DD_TRACE_ENABLED,Value="true" \
               Namespace=aws:elasticbeanstalk:application:environment,OptionName=AWS_S3_BUCKET_NAME,Value="magic-card-data" \
               Namespace=aws:elasticbeanstalk:application:environment,OptionName=VOUCHER_IMAGE_TEMP_DIR,Value="/tmp"
 

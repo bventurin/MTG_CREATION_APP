@@ -8,6 +8,7 @@ cffi==2.0.0
 charset-normalizer==3.4.4
 cryptography==46.0.4
 distro==1.9.0
+ddtrace==3.13.0
 dj-database-url==3.1.1
 Django==6.0
 google-ai-generativelanguage==0.6.15
