@@ -100,7 +100,7 @@ def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
         logger.info(f"S3 data size: {len(body) / (1024*1024):.1f} MB, parsing with streaming parser...")
         cards = _stream_parse_cards(body)
 
-        # Free the raw bytes
+        
         del body
 
         logger.info(f"Successfully loaded and stripped {len(cards)} cards from S3")
@@ -217,20 +217,13 @@ class ScryfallS3Service:
         index = self._get_index()
         name_lower = name.lower().strip()
 
-        # O(1) exact match
         if name_lower in index:
             cached = index[name_lower]
             if cached is not None:
                 return cached
-            # Previously failed lookup — skip expensive fuzzy match,
-            # jump straight to API retry if allowed
             if not allow_api_fallback:
                 return None
-            # Fall through to API fallback below (skip fuzzy search)
         else:
-            # Card not in index at all — try normalized/fuzzy before API
-
-            # Try without accented characters (e.g. "Æ" -> "A")
             normalized = unicodedata.normalize("NFD", name_lower)
             normalized = "".join(
                 c for c in normalized if unicodedata.category(c) != "Mn"
