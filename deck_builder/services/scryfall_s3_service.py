@@ -189,7 +189,12 @@ class ScryfallS3Service:
         cache_key = f"scryfall_cards_{self.bucket_name}_{self.bulk_type}"
 
         # Try to get from cache first
-        cards = cache.get(cache_key)
+        try:
+            cards = cache.get(cache_key)
+        except Exception as e:
+            logger.warning(f"Cache read failed ({type(e).__name__}), falling back to S3: {e}")
+            cards = None
+
         if cards is not None:
             logger.info(f"Loaded {len(cards)} cards from cache")
             return cards
@@ -200,8 +205,11 @@ class ScryfallS3Service:
 
         # Store in cache for 24 hours (86400 seconds) since the Lambda only updates daily
         if cards:
-            cache.set(cache_key, cards, 86400)
-            logger.info(f"Cached {len(cards)} cards for 24 hours")
+            try:
+                cache.set(cache_key, cards, 86400)
+                logger.info(f"Cached {len(cards)} cards for 24 hours")
+            except Exception as e:
+                logger.warning(f"Cache write failed ({type(e).__name__}): {e}")
 
         return cards
 

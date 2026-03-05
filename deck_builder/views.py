@@ -124,18 +124,26 @@ def create_deck(request):
 
 @login_required(login_url="login")
 def deck_list(request):
-    db = DynamoDBService()
-    decks = db.get_user_decks(str(request.user.id))
+    try:
+        db = DynamoDBService()
+        decks = db.get_user_decks(str(request.user.id))
 
-    for deck in decks:
-        cards = db.get_deck_cards(deck["deck_id"])
-        deck["card_count"] = sum(c["quantity"] for c in cards)
+        for deck in decks:
+            cards = db.get_deck_cards(deck["deck_id"])
+            deck["card_count"] = sum(c["quantity"] for c in cards)
 
-        main_deck = [c for c in cards if not c.get("is_sideboard")]
-        metadata = get_deck_metadata(main_deck)
-
-        deck["color_identity"] = metadata["colors"]
-        deck["representative_image"] = metadata["representative_image"]
+            main_deck = [c for c in cards if not c.get("is_sideboard")]
+            try:
+                metadata = get_deck_metadata(main_deck)
+                deck["color_identity"] = metadata["colors"]
+                deck["representative_image"] = metadata["representative_image"]
+            except Exception:
+                logger.exception("Failed to load metadata for deck %s", deck.get("deck_id"))
+                deck["color_identity"] = []
+                deck["representative_image"] = None
+    except Exception:
+        logger.exception("Failed to load deck list for user %s", request.user.id)
+        decks = []
 
     return render(request, "deck_builder/deck_list.html", {"decks": decks})
 
@@ -153,10 +161,18 @@ def deck_detail(request, deck_id):
     sideboard = [c for c in all_cards if c.get("is_sideboard")]
 
     # Organize main deck by type
-    main_deck_organized = organize_cards_by_type(main_deck)
+    try:
+        main_deck_organized = organize_cards_by_type(main_deck)
+    except Exception:
+        logger.exception("Failed to organize main deck for deck %s", deck_id)
+        main_deck_organized = {}
 
     # Keep sideboard as flat list
-    sideboard_list = organize_cards_by_type(sideboard)
+    try:
+        sideboard_list = organize_cards_by_type(sideboard)
+    except Exception:
+        logger.exception("Failed to organize sideboard for deck %s", deck_id)
+        sideboard_list = {}
     sideboard_flat = []
     for cards_list in sideboard_list.values():
         sideboard_flat.extend(cards_list)
