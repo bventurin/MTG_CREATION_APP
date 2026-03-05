@@ -82,18 +82,26 @@ def parse_deck_list(text):
 def home(request):
     decks = []
     if request.user.is_authenticated:
-        db = DynamoDBService()
-        decks = db.get_user_decks(str(request.user.id))
+        try:
+            db = DynamoDBService()
+            decks = db.get_user_decks(str(request.user.id))
 
-        for deck in decks:
-            cards = db.get_deck_cards(deck["deck_id"])
-            deck["card_count"] = sum(c["quantity"] for c in cards)
+            for deck in decks:
+                cards = db.get_deck_cards(deck["deck_id"])
+                deck["card_count"] = sum(c["quantity"] for c in cards)
 
-            main_deck = [c for c in cards if not c.get("is_sideboard")]
-            metadata = get_deck_metadata(main_deck)
-
-            deck["color_identity"] = metadata["colors"]
-            deck["representative_image"] = metadata["representative_image"]
+                main_deck = [c for c in cards if not c.get("is_sideboard")]
+                try:
+                    metadata = get_deck_metadata(main_deck)
+                    deck["color_identity"] = metadata["colors"]
+                    deck["representative_image"] = metadata["representative_image"]
+                except Exception:
+                    logger.exception("Failed to load metadata for deck %s", deck.get("deck_id"))
+                    deck["color_identity"] = []
+                    deck["representative_image"] = None
+        except Exception:
+            logger.exception("Failed to load decks for user %s", request.user.id)
+            decks = []
 
     return render(request, "deck_builder/home.html", {"decks": decks})
 
