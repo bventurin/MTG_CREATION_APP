@@ -93,4 +93,4 @@ The CI pipeline:
 
 Sensitive config (database URL, API keys, etc.) is stored in **GitHub Actions Secrets** — never hardcoded in the repo.
 
-Additionally, the application is monitored using **DataDog**. This provides real-time visibility into application performance and health, allowing for proactive issue detection and resolution in the production environment.
+Additionally, the application is monitored using **DataDog**. 
