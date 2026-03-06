@@ -178,14 +178,30 @@ def deck_detail(request, deck_id):
     for cards_list in sideboard_list.values():
         sideboard_flat.extend(cards_list)
 
-    # Calculate deck total price
+    # Pre-fetch all unique card data concurrently to avoid sequential API fallbacks
     scryfall_service = ScryfallS3Service()
+    unique_card_names = {c["card_name"] for c in all_cards}
+    
+    card_data_cache = {}
+    
+    def fetch_card_data(card_name):
+        return card_name, scryfall_service.get_card_by_name(card_name)
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_card = {executor.submit(fetch_card_data, name): name for name in unique_card_names}
+        for future in as_completed(future_to_card):
+            try:
+                card_name, data = future.result()
+                card_data_cache[card_name] = data
+            except Exception as e:
+                logger.exception(f"Failed to fetch data for card {future_to_card[future]}: {e}")
+                card_data_cache[future_to_card[future]] = None
 
+    # Calculate deck total price using pre-fetched data
     total_price = Decimal("0.00")
 
-    # helper to get price from card name
     def get_card_price(card_name):
-        card_data = scryfall_service.get_card_by_name(card_name)
+        card_data = card_data_cache.get(card_name)
         if card_data:
             return Decimal(str(ScryfallS3Service.get_card_price(card_data)))
         return Decimal("0.00")
@@ -195,8 +211,33 @@ def deck_detail(request, deck_id):
         qty = Decimal(card["quantity"])
         total_price += price * qty
         
-    # Generate Mana Curve Plot
-    mana_curve_url = PlotService.generate_mana_curve_plot(main_deck, scryfall_service)
+    # Generate Mana Curve Plot (with caching to avoid FileConvert API calls every time)
+    from django.core.cache import cache
+    
+    # Use deck's updated_at to invalidate cache if deck changes
+    # Use a fallback if updated_at is not available
+    updated_at = deck.get("updated_at", "unknown")
+    plot_cache_key = f"mana_curve_{deck_id}_{updated_at}"
+    
+    mana_curve_url = cache.get(plot_cache_key)
+    
+    if not mana_curve_url:
+        logger.info(f"Generating new mana curve plot for deck {deck_id}")
+        
+        # Create a mock scryfall service that uses our pre-fetched cache
+        class MockScryfallService:
+            @staticmethod
+            def get_card_by_name(name, *args, **kwargs):
+                return card_data_cache.get(name)
+                
+        mock_service = MockScryfallService()
+        mana_curve_url = PlotService.generate_mana_curve_plot(main_deck, mock_service)
+        
+        if mana_curve_url:
+            # Cache for 24 hours
+            cache.set(plot_cache_key, mana_curve_url, 86400)
+    else:
+        logger.info(f"Using cached mana curve plot for deck {deck_id}")
 
     context = {
         "deck": deck,
