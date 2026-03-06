@@ -34,3 +34,4 @@ htmlcov/
 
 
 .agent/
+locustfile.py
