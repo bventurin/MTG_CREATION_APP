@@ -12,6 +12,7 @@ from deck_builder.services.scryfall_s3_service import _strip_card, _build_index,
 from deck_builder.services.qr_service import QRService
 from deck_builder.services.voucher_service import VoucherService
 from deck_builder.services.plot_service import PlotService
+from deck_builder.templatetags.deck_builder_filters import mul, mana_icons, mark_safe_mana
 
 
 # ---------------------------------------------------------------------------
