@@ -14,49 +14,45 @@ class DeckRecommendationAgent:
 
         self._client = genai.Client(api_key=api_key)
 
+    def _extract_text_from_candidates(self, response) -> str:
+        """Join text parts from the first Gemini candidate."""
+        candidates = getattr(response, "candidates", None)
+        if not candidates:
+            return ""
+        content = getattr(candidates[0], "content", None)
+        parts = getattr(content, "parts", []) if content else []
+        return "".join(p.text for p in parts if getattr(p, "text", None))
+
     def _get_response_text(self, response):
-        # Extract JSON from Gemini API response
-        # Get text from candidates
-        if hasattr(response, "candidates") and response.candidates:
-            candidate = response.candidates[0]
-            if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
-                text_parts = []
-                for part in candidate.content.parts:
-                    if hasattr(part, "text") and part.text:
-                        text_parts.append(part.text)
-                if text_parts:
-                    return "".join(text_parts)
-
+        """Extract JSON from Gemini API response."""
+        text = self._extract_text_from_candidates(response)
+        if text:
+            return text
         # Fallback to response.text
-        if hasattr(response, "text") and response.text:
-            return response.text
+        return getattr(response, "text", None) or None
 
-        return None
+    @staticmethod
+    def _strip_markdown(text: str) -> str:
+        """Remove markdown code fences from model output."""
+        if "```json" in text:
+            return text.split("```json")[1].split("```")[0].strip()
+        if "```" in text:
+            return text.split("```")[1].split("```")[0].strip()
+        return text
 
     def _parse_recommendations(self, text):
-        # Parse JSON from model output, which may be wrapped in markdown
+        """Parse JSON from model output, which may be wrapped in markdown."""
         if not text:
             return []
 
         try:
-            # Strip markdown code blocks if present
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0].strip()
-            elif "```" in text:
-                text = text.split("```")[1].split("```")[0].strip()
-
-            # Find the start of the JSON content
+            text = self._strip_markdown(text)
             start_index = text.find("{")
-            if start_index == -1:
-                return []
-
-            # Find the matching '}' for the found '{'
             end_index = text.rfind("}")
-            if end_index == -1:
+            if start_index == -1 or end_index == -1:
                 return []
 
-            json_text = text[start_index : end_index + 1]
-            data = json.loads(json_text)
+            data = json.loads(text[start_index : end_index + 1])
             return data.get("cards", [])
         except json.JSONDecodeError:
             return []

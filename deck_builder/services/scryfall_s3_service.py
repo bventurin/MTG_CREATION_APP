@@ -80,43 +80,33 @@ def _stream_parse_cards(content: bytes) -> List[Dict]:
     return cards
 
 
+def _decompress_body(body: bytes) -> bytes:
+    """Decompress gzipped bytes if needed, otherwise return as-is."""
+    if body[:2] == b"\x1f\x8b":  # gzip magic number
+        logger.info("Decompressing gzipped S3 data...")
+        return gzip.decompress(body)
+    return body
+
+
 @lru_cache(maxsize=1)
 def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
     """Fetch all cards from S3, streaming the JSON to avoid MemoryError."""
+    data_key = f"scryfall/{bulk_type}/latest.json"
     try:
-        data_key = f"scryfall/{bulk_type}/latest.json"
         logger.info(f"Loading cards from S3: s3://{bucket_name}/{data_key}")
-
         response = s3_client.get_object(Bucket=bucket_name, Key=data_key)
-
-        # Stream the body in chunks to handle gzip detection
-        body = response["Body"].read()
-
-        # Check if content is gzipped
-        if body[:2] == b"\x1f\x8b":  # gzip magic number
-            logger.info("Decompressing gzipped S3 data...")
-            body = gzip.decompress(body)
-
+        body = _decompress_body(response["Body"].read())
         logger.info(f"S3 data size: {len(body) / (1024*1024):.1f} MB, parsing with streaming parser...")
         cards = _stream_parse_cards(body)
-
-        
         del body
-
         logger.info(f"Successfully loaded and stripped {len(cards)} cards from S3")
         return cards
-
     except s3_client.exceptions.NoSuchKey:
-        logger.error(
-            f"Card data not found at s3://{bucket_name}/scryfall/{bulk_type}/latest.json"
-        )
-        return []
-    except MemoryError:
-        logger.error("MemoryError while loading S3 data — instance has insufficient RAM")
-        logger.error(f"S3 Context: Bucket={bucket_name}, Region={os.getenv('AWS_REGION')}")
+        logger.error(f"Card data not found at s3://{bucket_name}/{data_key}")
         return []
     except Exception as e:
-        logger.error(f"Error fetching cards from S3: {type(e).__name__}: {str(e)}")
+        label = "MemoryError — instance has insufficient RAM" if isinstance(e, MemoryError) else f"{type(e).__name__}: {e}"
+        logger.error(f"Error fetching cards from S3: {label}")
         logger.error(f"S3 Context: Bucket={bucket_name}, Region={os.getenv('AWS_REGION')}")
         return []
 

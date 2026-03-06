@@ -93,6 +93,20 @@ def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
     return sorted_organized
 
 
+def _should_update_representative(
+    representative_card, is_creature: bool, is_card_creature: bool,
+    card_price: float, highest_price: float
+) -> bool:
+    """Return True if the current card should replace the representative image."""
+    if representative_card is None:
+        return True
+    if is_card_creature and not is_creature:
+        return True
+    if is_card_creature and is_creature and card_price > highest_price:
+        return True
+    return not is_creature and not is_card_creature and card_price > highest_price
+
+
 def get_deck_metadata(cards_data: List[Dict]) -> Dict:
     scryfall_service = ScryfallS3Service()
     colors = set()
@@ -127,20 +141,10 @@ def get_deck_metadata(cards_data: List[Dict]) -> Dict:
         card_price = ScryfallS3Service.get_card_price(card_data)
 
         # Select representative card
-        if representative_card is None:
+        if _should_update_representative(representative_card, is_creature, is_card_creature, card_price, highest_price):
             representative_card = image_url
             highest_price = card_price
             is_creature = is_card_creature
-        elif is_card_creature and not is_creature:
-            representative_card = image_url
-            highest_price = card_price
-            is_creature = True
-        elif is_card_creature and is_creature and card_price > highest_price:
-            representative_card = image_url
-            highest_price = card_price
-        elif not is_creature and not is_card_creature and card_price > highest_price:
-            representative_card = image_url
-            highest_price = card_price
 
     # Sort colors in WUBRG order
     color_order = {"W": 0, "U": 1, "B": 2, "R": 3, "G": 4}
