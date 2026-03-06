@@ -73,7 +73,7 @@ class PlotService:
         Takes the main_deck list and generates a bar chart URL of the mana curve.
         """
         try:
-            # 1. Calculate Mana Curve
+            #  Calculate Mana Curve
             mana_curve = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0} # 6 represents 6+
             
             for card in main_deck:

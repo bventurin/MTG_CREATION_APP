@@ -213,50 +213,35 @@ class ScryfallS3Service:
 
         return cards
 
-    def get_card_by_name(self, name: str, allow_api_fallback: bool = True) -> Optional[Dict]:
-        """Get a single card by name using O(1) index lookup.
-        Falls back to: normalized chars, fuzzy match, then live Scryfall API.
-
-        Args:
-            allow_api_fallback: If False, skip the live Scryfall API call.
-                Use False for bulk operations (home page, deck list) to
-                avoid slow API calls for every missing card.
-        """
-        index = self._get_index()
-        name_lower = name.lower().strip()
+    def _lookup_in_index(
+        self, index: Dict, name_lower: str, allow_api_fallback: bool
+    ) -> tuple:
+        """Search index by exact key, normalized unicode, then fuzzy match."""
 
         if name_lower in index:
             cached = index[name_lower]
             if cached is not None:
-                return cached
-            if not allow_api_fallback:
-                return None
-        else:
-            normalized = unicodedata.normalize("NFD", name_lower)
-            normalized = "".join(
-                c for c in normalized if unicodedata.category(c) != "Mn"
-            )
-            if normalized in index:
-                return index[normalized]
+                return cached, False
+            return None, allow_api_fallback  
 
-            # Fuzzy match
-            for indexed_name, card in index.items():
-                if card is None:
-                    continue
+        normalized = unicodedata.normalize("NFD", name_lower)
+        normalized = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+        if normalized in index:
+            return index[normalized], False
 
-                if (
-                    name_lower in indexed_name
-                    or indexed_name in name_lower
-                    or _string_similarity(name_lower, indexed_name) > 0.85
-                ):
-                    return card
+        for indexed_name, card in index.items():
+            if card is not None and (
+                name_lower in indexed_name
+                or indexed_name in name_lower
+                or _string_similarity(name_lower, indexed_name) > 0.85
+            ):
+                return card, False
 
-            # Not found via fuzzy either
-            if not allow_api_fallback:
-                return None
+        return None, allow_api_fallback 
 
-        # Track fallbacks per request to prevent server timeout
-        if not hasattr(self, '_api_fallback_count'):
+    def _fetch_from_api(self, name: str, name_lower: str, index: Dict) -> Optional[Dict]:
+        """Call the live Scryfall API for a single card and cache the result."""
+        if not hasattr(self, "_api_fallback_count"):
             self._api_fallback_count = 0
 
         if self._api_fallback_count >= MAX_API_FALLBACKS:
@@ -265,14 +250,12 @@ class ScryfallS3Service:
                 f"for this request. Skipping '{name}' to prevent server timeout. "
                 f"Please check your S3 bulk data configuration."
             )
-            # Cache failure
             index[name_lower] = None
             return None
 
         try:
             self._api_fallback_count += 1
-            # Scryfall requests 50-100ms delay between requests (max 10/sec)
-            time.sleep(0.1)
+            time.sleep(0.1)  # Scryfall requests 50-100 ms between calls
             resp = requests.get(
                 "https://api.scryfall.com/cards/named",
                 params={"fuzzy": name},
@@ -280,33 +263,37 @@ class ScryfallS3Service:
             )
             if resp.status_code == 200:
                 card_data = _strip_card(resp.json())
-                # Cache it for future lookups
                 index[name_lower] = card_data
                 logger.info(f"Fetched '{name}' from Scryfall API (not in S3 bulk data)")
                 return card_data
-            elif resp.status_code == 429:
+            if resp.status_code == 429:
                 logger.warning(f"Scryfall API rate limit (429) hit for '{name}'")
-                # Don't cache None for rate limits, so we can try again next time!
-                return None
-            else:
-                logger.warning(
-                    f"Card not found in Scryfall database: {name} "
-                    f"(Status: {resp.status_code})"
-                )
-                # Cache the failure so we don't spam the API on subsequent loops
-                index[name_lower] = None
-
+                return None   # don't cache — allow retry next time
+            logger.warning(f"Card not found in Scryfall database: {name} (status {resp.status_code})")
+            index[name_lower] = None
         except Exception as e:
             logger.warning(f"Scryfall API fallback failed for '{name}': {e}")
-            # Cache the failure to prevent timeout delays on every request
             index[name_lower] = None
 
         return None
 
+    def get_card_by_name(self, name: str, allow_api_fallback: bool = True) -> Optional[Dict]:
+        """Get a single card by name using O(1) index lookup.
+        Falls back to: normalized chars, fuzzy match, then live Scryfall API.
+        """
+        index = self._get_index()
+        name_lower = name.lower().strip()
+
+        card, should_try_api = self._lookup_in_index(index, name_lower, allow_api_fallback)
+        if card is not None or not should_try_api:
+            return card
+
+        return self._fetch_from_api(name, name_lower, index)
+
     @staticmethod
     def get_card_image_url(card: Dict, format: str = "normal") -> Optional[str]:
         """Extract image URL from card object.
-        Falls back to card_faces[0] for multiface cards (DFCs, split, flip).
+        Falls back to card_faces[0] for multiface cards.
         """
         image_uris = card.get("image_uris")
         if not image_uris and card.get("card_faces"):
