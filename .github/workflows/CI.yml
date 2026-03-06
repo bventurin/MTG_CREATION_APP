@@ -30,8 +30,10 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest deck_builder/tests.py \
+          pytest \
             --cov=deck_builder \
+            --cov=card_recommender \
+            --cov=accounts \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
             -v

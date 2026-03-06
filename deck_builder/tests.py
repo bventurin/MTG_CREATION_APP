@@ -530,3 +530,185 @@ class GetRecommendationsViewTests(TestCase):
         MockDB.return_value.get_deck_cards.return_value = []
         self.client.post(reverse("get_recommendations", kwargs={"deck_id": DECK_UUID}), {"cards": ["Shock"]})
         MockDB.return_value.update_deck.assert_called_once()
+
+    @patch("deck_builder.views.DynamoDBService")
+    def test_missing_deck_redirects(self, MockDB):
+        MockDB.return_value.get_deck.return_value = None
+        self.assertRedirects(
+            self.client.get(reverse("get_recommendations", kwargs={"deck_id": DECK_UUID})),
+            reverse("deck_list"), fetch_redirect_response=False,
+        )
+
+
+# ---------------------------------------------------------------------------
+# DynamoDBService
+# ---------------------------------------------------------------------------
+
+class DynamoDBServiceTests(TestCase):
+
+    @patch("deck_builder.services.dynamodb_service.boto3")
+    def _make_svc(self, mock_boto):
+        mock_table = MagicMock()
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        mock_boto.resource.return_value = mock_resource
+        from deck_builder.services.dynamodb_service import DynamoDBService
+        svc = DynamoDBService()
+        return svc, mock_table
+
+    def test_create_deck_puts_deck_and_cards(self):
+        svc, mock_table = self._make_svc()
+        cards = [{"card_name": "Bolt", "quantity": 4, "is_sideboard": False}]
+        deck_id = svc.create_deck("user1", "My Deck", cards)
+        self.assertIsNotNone(deck_id)
+        # 1 deck put + 1 card put = 2 calls
+        self.assertEqual(mock_table.put_item.call_count, 2)
+
+    def test_get_user_decks_queries_by_user(self):
+        svc, mock_table = self._make_svc()
+        mock_table.query.return_value = {"Items": [{"deck_id": "d1"}]}
+        result = svc.get_user_decks("user1")
+        self.assertEqual(len(result), 1)
+        mock_table.query.assert_called_once()
+
+    def test_get_deck_returns_item(self):
+        svc, mock_table = self._make_svc()
+        mock_table.get_item.return_value = {"Item": {"deck_id": "d1", "name": "Test"}}
+        result = svc.get_deck("user1", "d1")
+        self.assertEqual(result["name"], "Test")
+
+    def test_get_deck_returns_none_when_missing(self):
+        svc, mock_table = self._make_svc()
+        mock_table.get_item.return_value = {}
+        result = svc.get_deck("user1", "missing")
+        self.assertIsNone(result)
+
+    def test_get_deck_cards_returns_all(self):
+        svc, mock_table = self._make_svc()
+        mock_table.query.return_value = {"Items": [
+            {"card_name": "Bolt", "is_sideboard": False},
+            {"card_name": "Negate", "is_sideboard": True},
+        ]}
+        result = svc.get_deck_cards("d1")
+        self.assertEqual(len(result), 2)
+
+    def test_get_deck_cards_filters_sideboard(self):
+        svc, mock_table = self._make_svc()
+        mock_table.query.return_value = {"Items": [
+            {"card_name": "Bolt", "is_sideboard": False},
+            {"card_name": "Negate", "is_sideboard": True},
+        ]}
+        result = svc.get_deck_cards("d1", is_sideboard=True)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["card_name"], "Negate")
+
+    def test_update_deck_deletes_old_and_adds_new(self):
+        svc, mock_table = self._make_svc()
+        mock_table.query.return_value = {"Items": [
+            {"pk": "DECK#d1", "sk": "CARD#OldCard#False"},
+        ]}
+        new_cards = [{"card_name": "NewCard", "quantity": 3, "is_sideboard": False}]
+        result = svc.update_deck("user1", "d1", "Updated Deck", new_cards)
+        self.assertTrue(result)
+        mock_table.update_item.assert_called_once()
+        mock_table.delete_item.assert_called_once()
+        mock_table.put_item.assert_called_once()
+
+    def test_delete_deck_removes_deck_and_cards(self):
+        svc, mock_table = self._make_svc()
+        mock_table.query.return_value = {"Items": [
+            {"pk": "DECK#d1", "sk": "CARD#Bolt#False"},
+        ]}
+        result = svc.delete_deck("user1", "d1")
+        self.assertTrue(result)
+        # 1 deck delete + 1 card delete = 2 calls
+        self.assertEqual(mock_table.delete_item.call_count, 2)
+
+    def test_apply_voucher_to_deck(self):
+        svc, mock_table = self._make_svc()
+        result = svc.apply_voucher_to_deck("user1", "d1", "SAVE20")
+        self.assertTrue(result)
+        mock_table.update_item.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Model __str__ methods
+# ---------------------------------------------------------------------------
+
+class ModelStrTests(TestCase):
+
+    def test_card_str(self):
+        from deck_builder.models import Card
+        card = Card(name="Lightning Bolt", set_code="LEA")
+        self.assertEqual(str(card), "Lightning Bolt (LEA)")
+
+    def test_deck_str(self):
+        from deck_builder.models import Deck
+        deck = Deck(name="Burn Deck")
+        self.assertEqual(str(deck), "Burn Deck")
+
+    def test_deck_card_str(self):
+        from deck_builder.models import DeckCard
+        dc = DeckCard(card_name="Mountain", quantity=20)
+        self.assertEqual(str(dc), "20x Mountain")
+
+
+# ---------------------------------------------------------------------------
+# Template filter edge cases
+# ---------------------------------------------------------------------------
+
+class DeckBuilderFiltersTests(TestCase):
+
+    def test_mul_valid(self):
+        self.assertEqual(mul(3, 4), 12.0)
+
+    def test_mul_invalid_returns_zero(self):
+        self.assertEqual(mul("abc", 4), 0)
+
+    def test_mul_none_returns_zero(self):
+        self.assertEqual(mul(None, 4), 0)
+
+    def test_mana_icons_empty(self):
+        self.assertEqual(mana_icons(""), "")
+
+    def test_mana_icons_none(self):
+        self.assertEqual(mana_icons(None), "")
+
+    def test_mana_icons_whitespace_only(self):
+        self.assertEqual(mana_icons("   "), "")
+
+    def test_mana_icons_single_color(self):
+        result = mana_icons("R")
+        self.assertIn("ms-r", result)
+        self.assertIn("mana-cost", result)
+
+    def test_mana_icons_multi_color(self):
+        result = mana_icons("2UB")
+        self.assertIn("ms-2", result)
+        self.assertIn("ms-u", result)
+        self.assertIn("ms-b", result)
+
+    def test_mana_icons_two_digit_number(self):
+        result = mana_icons("12R")
+        self.assertIn("ms-12", result)
+        self.assertIn("ms-r", result)
+
+    def test_mana_icons_unknown_character_skipped(self):
+        result = mana_icons("{R}")
+        # { and } are unknown — should be skipped, R should be present
+        self.assertIn("ms-r", result)
+
+    def test_mana_icons_colorless(self):
+        result = mana_icons("C")
+        self.assertIn("ms-c", result)
+
+    def test_mana_icons_x_cost(self):
+        result = mana_icons("XRR")
+        self.assertIn("ms-x", result)
+        self.assertIn("ms-r", result)
+
+    def test_mark_safe_mana_returns_safe_string(self):
+        from django.utils.safestring import SafeString
+        result = mark_safe_mana("<i>test</i>")
+        self.assertIsInstance(result, SafeString)
+
