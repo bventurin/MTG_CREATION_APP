@@ -10,6 +10,7 @@ from .services.scryfall_s3_service import ScryfallS3Service
 from .services.plot_service import PlotService
 from card_recommender.services.ai_recommender import DeckRecommendationAgent
 from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import logging
 
@@ -316,37 +317,53 @@ def get_recommendations(request, deck_id):
         card_names, format_name="standard"
     )
 
-    # Fetch card details using the existing cached service
+    # Fetch card details using the existing cached service with parallelization
     scryfall_service = ScryfallS3Service()
 
-    recommendations_with_details = []
-    for card_name in recommendations:
+    def fetch_card_details(card_name):
+        """Fetch details for a single card (executed in parallel)"""
         card_data = scryfall_service.get_card_by_name(card_name)
         if card_data:
-            usd_price = ScryfallS3Service.get_card_price(card_data)
-            mana_cost = ScryfallS3Service.get_card_mana_cost(card_data)
-
-            recommendations_with_details.append(
-                {
-                    "name": card_name,
-                    "type_line": card_data.get("type_line", ""),
-                    "image_url": ScryfallS3Service.get_card_image_url(
-                        card_data, "normal"
-                    ),
-                    "mana_cost": mana_cost,
-                    "price": usd_price,
-                }
-            )
+            return {
+                "name": card_name,
+                "type_line": card_data.get("type_line", ""),
+                "image_url": ScryfallS3Service.get_card_image_url(card_data, "normal"),
+                "mana_cost": ScryfallS3Service.get_card_mana_cost(card_data),
+                "price": ScryfallS3Service.get_card_price(card_data),
+            }
         else:
-            recommendations_with_details.append(
-                {
+            return {
+                "name": card_name,
+                "type_line": "Unknown",
+                "image_url": None,
+                "mana_cost": "",
+                "price": 0.0,
+            }
+
+    # Fetch all card details in parallel (max 5 workers to respect rate limits)
+    recommendations_with_details = []
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        # Submit all tasks
+        future_to_card = {
+            executor.submit(fetch_card_details, card_name): card_name
+            for card_name in recommendations
+        }
+        # Collect results as they complete
+        for future in as_completed(future_to_card):
+            try:
+                result = future.result()
+                recommendations_with_details.append(result)
+            except Exception as e:
+                card_name = future_to_card[future]
+                logger.exception(f"Failed to fetch details for card '{card_name}': {e}")
+                # Add fallback entry for failed card
+                recommendations_with_details.append({
                     "name": card_name,
                     "type_line": "Unknown",
                     "image_url": None,
                     "mana_cost": "",
                     "price": 0.0,
-                }
-            )
+                })
 
     context = {
         "deck": deck,

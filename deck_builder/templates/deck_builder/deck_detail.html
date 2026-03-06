@@ -15,7 +15,7 @@
         </div>
         <div class="col-auto">
             <div class="btn-group" role="group">
-                <a href="{% url 'get_recommendations' deck.deck_id %}" class="btn btn-success"><i
+                <a href="{% url 'get_recommendations' deck.deck_id %}" class="btn btn-success" id="ai-suggestions-btn"><i
                         class="bi bi-lightbulb me-2"></i>Get AI Suggestions</a>
                 <div class="btn-group position-relative" role="group">
                     {% if qr_code_url %}
@@ -209,6 +209,22 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // AI Suggestions button loading state
+        const aiBtn = document.getElementById('ai-suggestions-btn');
+        if (aiBtn) {
+            aiBtn.addEventListener('click', function (e) {
+                // Show loading state
+                const icon = this.querySelector('i');
+                if (icon) {
+                    icon.className = 'spinner-border spinner-border-sm me-2';
+                }
+                this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Analyzing deck...';
+                this.classList.add('disabled');
+                this.style.pointerEvents = 'none';
+            });
+        }
+
+        // Voucher download button
         const downloadBtn = document.getElementById('download-voucher-btn');
         const ticketElement = document.getElementById('voucher-ticket');
 
