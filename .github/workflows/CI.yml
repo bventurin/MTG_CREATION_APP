@@ -31,9 +31,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           pytest \
-            --cov=deck_builder \
-            --cov=card_recommender \
-            --cov=accounts \
+            --cov=. \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
             -v
