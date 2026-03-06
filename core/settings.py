@@ -37,6 +37,10 @@ ALLOWED_HOSTS = ['*']  # For initial deployment; lock this down to your specific
 
 CSRF_TRUSTED_ORIGINS = ['https://*.elasticbeanstalk.com']
 
+# Cookie hardening — HttpOnly prevents JS from reading these cookies
+CSRF_COOKIE_HTTPONLY = True
+SESSION_COOKIE_HTTPONLY = True
+
 
 # Application definition
 
@@ -53,6 +57,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'core.middleware.SecurityHeadersMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

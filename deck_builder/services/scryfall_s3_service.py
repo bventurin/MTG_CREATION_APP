@@ -111,30 +111,33 @@ def _get_all_cards_cached(bucket_name: str, bulk_type: str) -> List[Dict]:
         return []
 
 
-# Global name index for O(1) lookups (built once)
 _cards_index = None
 
 
+def _index_card(index: Dict, card: Dict) -> None:
+    """Add all name aliases for a single card into the index."""
+    card_name = card.get("name", "").lower().strip()
+    if card_name:
+        index[card_name] = card
+        if " // " in card_name:
+            front_face = card_name.split(" // ")[0].strip()
+            if front_face and front_face not in index:
+                index[front_face] = card
+
+    printed_name = card.get("printed_name", "").lower().strip()
+    if printed_name and printed_name not in index:
+        index[printed_name] = card
+
+    flavor_name = card.get("flavor_name", "").lower().strip()
+    if flavor_name and flavor_name not in index:
+        index[flavor_name] = card
+
+
 def _build_index(cards: List[Dict]) -> Dict[str, Dict]:
-    """Build a name -> card dictionary for O(1) lookups."""
-    index = {}
+    
+    index: Dict[str, Dict] = {}
     for card in cards:
-        card_name = card.get("name", "").lower().strip()
-        if card_name:
-            index[card_name] = card
-            if " // " in card_name:
-                front_face = card_name.split(" // ")[0].strip()
-                if front_face and front_face not in index:
-                    index[front_face] = card
-
-        printed_name = card.get("printed_name", "").lower().strip()
-        if printed_name and printed_name not in index:
-            index[printed_name] = card
-
-        flavor_name = card.get("flavor_name", "").lower().strip()
-        if flavor_name and flavor_name not in index:
-            index[flavor_name] = card
-
+        _index_card(index, card)
     return index
 
 
@@ -292,7 +295,7 @@ class ScryfallS3Service:
 
     @staticmethod
     def get_card_price(card: Dict) -> float:
-        """Extract price with fallback: usd -> usd_foil -> eur -> tix"""
+        """Extract price with fallback: usd > usd_foil > eur > tix"""
         prices = card.get("prices", {})
         usd_price = (
             prices.get("usd")
