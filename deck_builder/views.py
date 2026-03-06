@@ -11,6 +11,7 @@ from .services.plot_service import PlotService
 from card_recommender.services.ai_recommender import DeckRecommendationAgent
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from django.core.cache import cache
 import re
 import logging
 
@@ -212,7 +213,7 @@ def deck_detail(request, deck_id):
         total_price += price * qty
         
     # Generate Mana Curve Plot (with caching to avoid FileConvert API calls every time)
-    from django.core.cache import cache
+   
     
     # Use deck's updated_at to invalidate cache if deck changes
     # Use a fallback if updated_at is not available
