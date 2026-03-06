@@ -285,7 +285,6 @@ class DeckRecommendationAgentTests(TestCase):
         long_deck = [f"Card {i}" for i in range(30)]
         agent.get_deck_improvement_recommendations(long_deck)
 
-        # Check that prompt was truncated
         call_args = mock_client.models.generate_content.call_args
         prompt = call_args[1]["contents"]
         self.assertIn("(10 more)", prompt)

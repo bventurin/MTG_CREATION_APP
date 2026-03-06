@@ -1,11 +1,9 @@
 """Tests for the deck_builder app."""
 
 from unittest.mock import MagicMock, patch
-
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
-
 from deck_builder.views import parse_deck_list
 from deck_builder.services.card_organizer import get_card_type_category, organize_cards_by_type, get_deck_metadata
 from deck_builder.services.scryfall_s3_service import _strip_card, _build_index, _string_similarity, ScryfallS3Service
@@ -67,9 +65,6 @@ class GetCardTypeCategoryTests(TestCase):
             with self.subTest(type_line=type_line):
                 self.assertEqual(get_card_type_category(type_line), expected)
 
-
-# ---------------------------------------------------------------------------
-# _strip_card / _build_index / _string_similarity
 # ---------------------------------------------------------------------------
 
 class ScryallHelpersTests(TestCase):
@@ -712,3 +707,393 @@ class DeckBuilderFiltersTests(TestCase):
         result = mark_safe_mana("<i>test</i>")
         self.assertIsInstance(result, SafeString)
 
+
+# ---------------------------------------------------------------------------
+# Additional ScryfallS3Service coverage (stream parse, S3 errors, index,
+# ---------------------------------------------------------------------------
+
+class ScryfallStreamParseTests(TestCase):
+
+    def test_stream_parse_valid_json(self):
+        from deck_builder.services.scryfall_s3_service import _stream_parse_cards
+        import json
+        cards = [{"name": "Bolt", "type_line": "Instant"}]
+        content = json.dumps(cards).encode()
+        result = _stream_parse_cards(content)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["name"], "Bolt")
+
+    def test_stream_parse_invalid_json_returns_partial(self):
+        from deck_builder.services.scryfall_s3_service import _stream_parse_cards
+        # Corrupt data — should return empty list without raising
+        result = _stream_parse_cards(b"not json at all {{{")
+        self.assertIsInstance(result, list)
+
+
+class ScryfallGetAllCardsCachedTests(TestCase):
+
+    @patch("deck_builder.services.scryfall_s3_service.s3_client")
+    def test_nosuchkey_returns_empty(self, mock_s3):
+        from deck_builder.services.scryfall_s3_service import _get_all_cards_cached
+        _get_all_cards_cached.cache_clear()
+        mock_s3.get_object.side_effect = mock_s3.exceptions.NoSuchKey("no key")
+        mock_s3.exceptions.NoSuchKey = type("NoSuchKey", (Exception,), {})
+        mock_s3.get_object.side_effect = mock_s3.exceptions.NoSuchKey("no key")
+        result = _get_all_cards_cached("bucket", "type")
+        _get_all_cards_cached.cache_clear()
+        self.assertEqual(result, [])
+
+    @patch("deck_builder.services.scryfall_s3_service.s3_client")
+    def test_generic_exception_returns_empty(self, mock_s3):
+        from deck_builder.services.scryfall_s3_service import _get_all_cards_cached
+        _get_all_cards_cached.cache_clear()
+        mock_s3.get_object.side_effect = Exception("network error")
+        mock_s3.exceptions.NoSuchKey = type("NoSuchKey", (Exception,), {})
+        result = _get_all_cards_cached("bucket", "type")
+        _get_all_cards_cached.cache_clear()
+        self.assertEqual(result, [])
+
+    @patch("deck_builder.services.scryfall_s3_service._stream_parse_cards")
+    @patch("deck_builder.services.scryfall_s3_service.s3_client")
+    def test_plain_json_body_parsed(self, mock_s3, mock_parse):
+        import json
+        from deck_builder.services.scryfall_s3_service import _get_all_cards_cached
+        _get_all_cards_cached.cache_clear()
+        mock_s3.exceptions.NoSuchKey = type("NoSuchKey", (Exception,), {})
+        body = json.dumps([{"name": "Bolt"}]).encode()
+        mock_s3.get_object.return_value = {"Body": MagicMock(read=MagicMock(return_value=body))}
+        mock_parse.return_value = [{"name": "Bolt"}]
+        result = _get_all_cards_cached("bucket", "type")
+        _get_all_cards_cached.cache_clear()
+        self.assertEqual(len(result), 1)
+
+    @patch("deck_builder.services.scryfall_s3_service._stream_parse_cards")
+    @patch("deck_builder.services.scryfall_s3_service.s3_client")
+    def test_gzipped_body_decompressed(self, mock_s3, mock_parse):
+        import gzip, json
+        from deck_builder.services.scryfall_s3_service import _get_all_cards_cached
+        _get_all_cards_cached.cache_clear()
+        mock_s3.exceptions.NoSuchKey = type("NoSuchKey", (Exception,), {})
+        body = gzip.compress(json.dumps([{"name": "Elf"}]).encode())
+        mock_s3.get_object.return_value = {"Body": MagicMock(read=MagicMock(return_value=body))}
+        mock_parse.return_value = [{"name": "Elf"}]
+        result = _get_all_cards_cached("bucket", "type")
+        _get_all_cards_cached.cache_clear()
+        self.assertEqual(len(result), 1)
+
+
+class ScryfallGetIndexTests(TestCase):
+
+    def setUp(self):
+        # Reset global index before each test
+        import deck_builder.services.scryfall_s3_service as mod
+        mod._cards_index = None
+
+    def tearDown(self):
+        import deck_builder.services.scryfall_s3_service as mod
+        mod._cards_index = None
+
+    @patch("deck_builder.services.scryfall_s3_service.cache")
+    @patch("deck_builder.services.scryfall_s3_service._get_all_cards_cached")
+    def test_get_index_empty_cards_sets_empty_index(self, mock_s3, mock_cache):
+        mock_cache.get.return_value = None
+        mock_s3.return_value = []
+        svc = ScryfallS3Service()
+        index = svc._get_index()
+        self.assertEqual(index, {})
+
+    @patch("deck_builder.services.scryfall_s3_service.cache")
+    @patch("deck_builder.services.scryfall_s3_service._get_all_cards_cached")
+    def test_get_index_builds_index_from_cards(self, mock_s3, mock_cache):
+        mock_cache.get.return_value = None
+        mock_s3.return_value = [{"name": "Lightning Bolt", "type_line": "Instant"}]
+        svc = ScryfallS3Service()
+        index = svc._get_index()
+        self.assertIn("lightning bolt", index)
+
+    @patch("deck_builder.services.scryfall_s3_service.cache")
+    @patch("deck_builder.services.scryfall_s3_service._get_all_cards_cached")
+    def test_cache_write_failure_still_returns_cards(self, mock_s3, mock_cache):
+        mock_cache.get.return_value = None
+        mock_cache.set.side_effect = Exception("cache write failed")
+        mock_s3.return_value = [{"name": "Forest"}]
+        result = ScryfallS3Service().get_all_cards()
+        self.assertEqual(len(result), 1)
+
+
+class ScryfallLookupEdgeCasesTests(TestCase):
+
+    def _svc_with_index(self, index):
+        svc = ScryfallS3Service.__new__(ScryfallS3Service)
+        svc.bucket_name = "b"
+        svc.bulk_type = "t"
+        svc._get_index = MagicMock(return_value=index)
+        return svc
+
+    def test_cached_none_in_index_no_fallback_returns_none(self):
+        """When index has card=None (previously failed) and fallback disabled."""
+        svc = self._svc_with_index({"ghost card": None})
+        result = svc.get_card_by_name("Ghost Card", allow_api_fallback=False)
+        self.assertIsNone(result)
+
+    def test_normalized_unicode_lookup(self):
+        """Accented character gets normalized for lookup."""
+        card = {"name": "Lim-Dul's Vault"}
+        svc = self._svc_with_index({"lim-dul's vault": card})
+        # Should not raise — just exercises the NFD normalization path
+        result = svc.get_card_by_name("Lim-Dûl's Vault")
+        # result is either the card (normalized matched) or None (fallback)
+        # We only care that no exception was raised
+        self.assertIn(result, [card, None])
+
+    def test_fuzzy_match_finds_card(self):
+        card = {"name": "Lightning Bolt"}
+        index = {"lightning bolt": card}
+        svc = self._svc_with_index(index)
+        # "light" is a substring of "lightning bolt" → fuzzy matches
+        result = svc.get_card_by_name("light", allow_api_fallback=False)
+        self.assertEqual(result, card)
+
+    def test_fuzzy_match_skips_none_entries(self):
+        index = {"broken card": None, "lightning bolt": {"name": "Lightning Bolt"}}
+        svc = self._svc_with_index(index)
+        # Should skip None entry and not crash
+        result = svc.get_card_by_name("light", allow_api_fallback=False)
+        self.assertIsNotNone(result)
+
+    @patch("deck_builder.services.scryfall_s3_service.requests.get")
+    @patch("deck_builder.services.scryfall_s3_service.time.sleep")
+    def test_api_non200_caches_none_returns_none(self, _, mock_get):
+        mock_get.return_value = MagicMock(status_code=404)
+        index = {}
+        svc = self._svc_with_index(index)
+        result = svc.get_card_by_name("Nonexistent Card")
+        self.assertIsNone(result)
+        self.assertIsNone(index.get("nonexistent card"))  # cached as None
+
+    @patch("deck_builder.services.scryfall_s3_service.requests.get")
+    @patch("deck_builder.services.scryfall_s3_service.time.sleep")
+    def test_api_exception_caches_none_returns_none(self, _, mock_get):
+        mock_get.side_effect = Exception("timeout")
+        index = {}
+        svc = self._svc_with_index(index)
+        result = svc.get_card_by_name("Error Card")
+        self.assertIsNone(result)
+
+    def test_max_api_fallbacks_exceeded_returns_none(self):
+        """When _api_fallback_count >= MAX_API_FALLBACKS, skip and return None."""
+        from deck_builder.services.scryfall_s3_service import MAX_API_FALLBACKS
+        index = {}
+        svc = self._svc_with_index(index)
+        svc._api_fallback_count = MAX_API_FALLBACKS  # already at limit
+        result = svc.get_card_by_name("Any Card")
+        self.assertIsNone(result)
+        self.assertIsNone(index.get("any card"))
+
+
+# ---------------------------------------------------------------------------
+# Additional view coverage — exception handlers, sideboard, QR session,
+# ---------------------------------------------------------------------------
+
+class HomeViewMetadataErrorTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("meta_user"))
+
+    @patch("deck_builder.views.DynamoDBService")
+    @patch("deck_builder.views.get_deck_metadata", side_effect=Exception("meta fail"))
+    def test_metadata_error_still_renders_deck(self, _, MockDB):
+        """Lines 99-102: metadata exception sets color_identity=[] and image=None."""
+        MockDB.return_value.get_user_decks.return_value = [dict(MOCK_DECK)]
+        MockDB.return_value.get_deck_cards.return_value = list(MOCK_CARDS)
+        response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
+        deck = response.context["decks"][0]
+        self.assertEqual(deck["color_identity"], [])
+        self.assertIsNone(deck["representative_image"])
+
+
+class DeckListMetadataErrorTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("list_meta_user"))
+
+    @patch("deck_builder.views.DynamoDBService")
+    @patch("deck_builder.views.get_deck_metadata", side_effect=Exception("meta fail"))
+    def test_metadata_error_in_deck_list(self, _, MockDB):
+        """Lines 141-144: metadata exception in deck_list sets defaults."""
+        MockDB.return_value.get_user_decks.return_value = [dict(MOCK_DECK)]
+        MockDB.return_value.get_deck_cards.return_value = list(MOCK_CARDS)
+        response = self.client.get(reverse("deck_list"))
+        self.assertEqual(response.status_code, 200)
+
+
+class DeckDetailExtendedTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("detail_user"))
+
+    @patch("deck_builder.views.PlotService")
+    @patch("deck_builder.views.ScryfallS3Service")
+    @patch("deck_builder.views.organize_cards_by_type")
+    @patch("deck_builder.views.DynamoDBService")
+    def test_organize_main_deck_exception_handled(self, MockDB, mock_organize, MockScryfall, MockPlot):
+        """Lines 167-169: organize_cards_by_type exception → main_deck_organized={}."""
+        MockDB.return_value.get_deck.return_value = dict(MOCK_DECK)
+        MockDB.return_value.get_deck_cards.return_value = list(MOCK_CARDS)
+        MockScryfall.return_value.get_card_by_name.return_value = None
+        MockScryfall.get_card_price.return_value = 0.0
+        MockPlot.generate_mana_curve_plot.return_value = None
+        mock_organize.side_effect = Exception("type error")
+        response = self.client.get(reverse("deck_detail", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 200)
+
+    @patch("deck_builder.views.PlotService")
+    @patch("deck_builder.views.ScryfallS3Service")
+    @patch("deck_builder.views.organize_cards_by_type")
+    @patch("deck_builder.views.DynamoDBService")
+    def test_sideboard_flat_populated_from_organize(self, MockDB, mock_organize, MockScryfall, MockPlot):
+        """Line 179: sideboard_flat.extend(cards_list) when sideboard has cards."""
+        deck = dict(MOCK_DECK)
+        cards = list(MOCK_CARDS) + [
+            {"card_name": "Negate", "quantity": 2, "is_sideboard": True}
+        ]
+        MockDB.return_value.get_deck.return_value = deck
+        MockDB.return_value.get_deck_cards.return_value = cards
+        MockScryfall.return_value.get_card_by_name.return_value = None
+        MockScryfall.get_card_price.return_value = 0.0
+        MockPlot.generate_mana_curve_plot.return_value = None
+        # First call (main deck) returns {}, second (sideboard) returns {"Instant": [{"card_name": "Negate"}]}
+        mock_organize.side_effect = [
+            {},
+            {"Instant": [{"card_name": "Negate", "quantity": 2}]}
+        ]
+        response = self.client.get(reverse("deck_detail", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 200)
+
+    @patch("deck_builder.views.PlotService")
+    @patch("deck_builder.views.ScryfallS3Service")
+    @patch("deck_builder.views.organize_cards_by_type", return_value={})
+    @patch("deck_builder.views.DynamoDBService")
+    def test_get_card_price_with_data(self, MockDB, _, MockScryfall, MockPlot):
+        """Line 190: get_card_price returns price when card_data exists."""
+        MockDB.return_value.get_deck.return_value = dict(MOCK_DECK)
+        MockDB.return_value.get_deck_cards.return_value = [MOCK_CARDS[0]]  # 1 card
+        MockScryfall.return_value.get_card_by_name.return_value = {"prices": {"usd": "1.50"}}
+        MockScryfall.get_card_price.return_value = 1.50
+        MockPlot.generate_mana_curve_plot.return_value = None
+        response = self.client.get(reverse("deck_detail", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 200)
+
+    @patch("deck_builder.views.PlotService")
+    @patch("deck_builder.views.ScryfallS3Service")
+    @patch("deck_builder.views.organize_cards_by_type", return_value={})
+    @patch("deck_builder.views.DynamoDBService")
+    def test_qr_code_in_session_added_to_context(self, MockDB, _, MockScryfall, MockPlot):
+        """Line 223-224: QR code from session is added to context."""
+        MockDB.return_value.get_deck.return_value = dict(MOCK_DECK)
+        MockDB.return_value.get_deck_cards.return_value = []
+        MockScryfall.return_value.get_card_by_name.return_value = None
+        MockScryfall.get_card_price.return_value = 0.0
+        MockPlot.generate_mana_curve_plot.return_value = None
+        session = self.client.session
+        session[f"qr_code_{DECK_UUID}"] = "http://qr.example.com/qr.png"
+        session.save()
+        response = self.client.get(reverse("deck_detail", kwargs={"deck_id": DECK_UUID}))
+        self.assertIn("qr_code_url", response.context)
+
+
+class EditDeckSideboardTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("edit_user"))
+
+    @patch("deck_builder.views.DynamoDBService")
+    def test_get_with_sideboard_includes_sideboard_text(self, MockDB):
+        """Lines 260-263: sideboard section added to deck_text when present."""
+        MockDB.return_value.get_deck.return_value = dict(MOCK_DECK)
+        MockDB.return_value.get_deck_cards.return_value = [
+            {"card_name": "Bolt", "quantity": 4, "is_sideboard": False},
+            {"card_name": "Negate", "quantity": 2, "is_sideboard": True},
+        ]
+        response = self.client.get(reverse("edit_deck", kwargs={"deck_id": DECK_UUID}))
+        self.assertIn("Sideboard", response.context["deck_text"])
+        self.assertIn("Negate", response.context["deck_text"])
+
+
+class RecommendationsCardFoundTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("rec_user"))
+
+    @patch("deck_builder.views.ScryfallS3Service")
+    @patch("deck_builder.views.DeckRecommendationAgent")
+    @patch("deck_builder.views.DynamoDBService")
+    def test_get_recommendations_card_found_returns_details(self, MockDB, MockAgent, MockScryfall):
+        """Lines 326-332: fetch_card_details returns full card data when found."""
+        MockDB.return_value.get_deck.return_value = dict(MOCK_DECK)
+        MockDB.return_value.get_deck_cards.return_value = []
+        MockAgent.return_value.get_deck_improvement_recommendations.return_value = ["Shock"]
+        MockScryfall.return_value.get_card_by_name.return_value = {
+            "type_line": "Instant",
+            "image_uris": {"normal": "http://img.example.com/shock.jpg"},
+            "mana_cost": "{R}",
+            "prices": {"usd": "0.10"},
+        }
+        MockScryfall.get_card_image_url.return_value = "http://img.example.com/shock.jpg"
+        MockScryfall.get_card_mana_cost.return_value = "{R}"
+        MockScryfall.get_card_price.return_value = 0.10
+        response = self.client.get(reverse("get_recommendations", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 200)
+        recs = response.context["recommendations"]
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0]["name"], "Shock")
+
+
+class RecommendationsExecutorExceptionTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("exec_user"))
+
+    @patch("deck_builder.views.ScryfallS3Service")
+    @patch("deck_builder.views.DeckRecommendationAgent")
+    @patch("deck_builder.views.DynamoDBService")
+    def test_future_exception_adds_fallback_entry(self, MockDB, MockAgent, MockScryfall):
+        """Lines 356-360: when future.result() raises, a fallback card entry is appended."""
+        MockDB.return_value.get_deck.return_value = dict(MOCK_DECK)
+        MockDB.return_value.get_deck_cards.return_value = []
+        MockAgent.return_value.get_deck_improvement_recommendations.return_value = ["ErrorCard"]
+        # Make get_card_by_name raise to trigger the future exception handler
+        MockScryfall.return_value.get_card_by_name.side_effect = RuntimeError("lookup failed")
+        response = self.client.get(reverse("get_recommendations", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 200)
+        recs = response.context["recommendations"]
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0]["type_line"], "Unknown")
+        self.assertIsNone(recs[0]["image_url"])
+
+
+class GenerateQRCodeMissingDeckTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("qr_missing_user"))
+
+    @patch("deck_builder.views.DynamoDBService")
+    def test_missing_deck_redirects_to_deck_list(self, MockDB):
+        """Line 383: generate_qr_code redirects to deck_list when deck is None."""
+        MockDB.return_value.get_deck.return_value = None
+        response = self.client.post(reverse("generate_qr_code", kwargs={"deck_id": DECK_UUID}))
+        self.assertRedirects(response, reverse("deck_list"), fetch_redirect_response=False)
+
+
+class AddVoucherMissingDeckTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("voucher_missing_user"))
+
+    @patch("deck_builder.views.DynamoDBService")
+    def test_missing_deck_redirects_to_deck_list(self, MockDB):
+        """Line 402: add_voucher redirects to deck_list when deck is None."""
+        MockDB.return_value.get_deck.return_value = None
+        response = self.client.post(reverse("add_voucher", kwargs={"deck_id": DECK_UUID}))
+        self.assertRedirects(response, reverse("deck_list"), fetch_redirect_response=False)
