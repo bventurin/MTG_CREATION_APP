@@ -150,6 +150,34 @@ def deck_list(request):
     return render(request, "deck_builder/deck_list.html", {"decks": decks})
 
 
+def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
+    """Generate or retrieve cached mana curve plot URL."""
+    updated_at = deck.get("updated_at", "unknown")
+    plot_cache_key = f"mana_curve_{deck_id}_{updated_at}"
+
+    mana_curve_url = cache.get(plot_cache_key)
+
+    if not mana_curve_url:
+        logger.info(f"Generating new mana curve plot for deck {deck_id}")
+
+        # Create a mock scryfall service that uses our pre-fetched cache
+        class MockScryfallService:
+            @staticmethod
+            def get_card_by_name(name, *args, **kwargs):
+                return card_data_cache.get(name)
+
+        mock_service = MockScryfallService()
+        mana_curve_url = PlotService.generate_mana_curve_plot(main_deck, mock_service)
+
+        # Cache for 24 hours if generation succeeded
+        if mana_curve_url:
+            cache.set(plot_cache_key, mana_curve_url, 86400)
+    else:
+        logger.info(f"Using cached mana curve plot for deck {deck_id}")
+
+    return mana_curve_url
+
+
 @login_required(login_url="login")
 def deck_detail(request, deck_id):
     db = DynamoDBService()
@@ -213,32 +241,7 @@ def deck_detail(request, deck_id):
         total_price += price * qty
         
     # Generate Mana Curve Plot (with caching to avoid FileConvert API calls every time)
-   
-    
-    # Use deck's updated_at to invalidate cache if deck changes
-    # Use a fallback if updated_at is not available
-    updated_at = deck.get("updated_at", "unknown")
-    plot_cache_key = f"mana_curve_{deck_id}_{updated_at}"
-    
-    mana_curve_url = cache.get(plot_cache_key)
-    
-    if not mana_curve_url:
-        logger.info(f"Generating new mana curve plot for deck {deck_id}")
-        
-        # Create a mock scryfall service that uses our pre-fetched cache
-        class MockScryfallService:
-            @staticmethod
-            def get_card_by_name(name, *args, **kwargs):
-                return card_data_cache.get(name)
-                
-        mock_service = MockScryfallService()
-        mana_curve_url = PlotService.generate_mana_curve_plot(main_deck, mock_service)
-        
-        if mana_curve_url:
-            # Cache for 24 hours
-            cache.set(plot_cache_key, mana_curve_url, 86400)
-    else:
-        logger.info(f"Using cached mana curve plot for deck {deck_id}")
+    mana_curve_url = _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache)
 
     context = {
         "deck": deck,
