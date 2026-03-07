@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // AI Suggestions button loading state
     const aiBtn = document.getElementById('ai-suggestions-btn');
     if (aiBtn) {
-        aiBtn.addEventListener('click', function (e) {
+        aiBtn.addEventListener('click', function () {
             // Show loading state
             const icon = this.querySelector('i');
             if (icon) {
@@ -26,9 +26,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (downloadBtn && ticketElement) {
         downloadBtn.addEventListener('click', function () {
             // Check if html2canvas is available
-            if (typeof html2canvas === 'undefined') {
+            if (typeof window.html2canvas === 'undefined') {
                 console.error('html2canvas library is not loaded');
-                alert('Unable to generate voucher image. Please refresh the page and try again.');
+                alert('Unable to generate voucher image. The html2canvas library failed to load. Please check your internet connection and refresh the page.');
                 return;
             }
 
@@ -37,10 +37,11 @@ document.addEventListener('DOMContentLoaded', function () {
             this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Generating...';
             this.disabled = true;
 
-            html2canvas(ticketElement, {
-                scale: 2, // Higher resolution
-                backgroundColor: null, // Transparent background if needed
-                useCORS: true // Allow loading external fonts/images if any
+            // Use window.html2canvas to ensure we're accessing the global
+            window.html2canvas(ticketElement, {
+                scale: 2,
+                backgroundColor: null,
+                useCORS: true
             }).then(canvas => {
                 // Convert to image and download
                 const link = document.createElement('a');
