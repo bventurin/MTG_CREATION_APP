@@ -151,7 +151,8 @@ def deck_list(request):
 
 
 def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
-    """Generate or retrieve cached mana curve plot URL."""
+    """Helper function to get cached mana curve or generate a new one."""
+    # Use the deck's updated_at timestamp to invalidate cache when deck changes
     updated_at = deck.get("updated_at", "unknown")
     plot_cache_key = f"mana_curve_{deck_id}_{updated_at}"
 
@@ -160,7 +161,9 @@ def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
     if not mana_curve_url:
         logger.info(f"Generating new mana curve plot for deck {deck_id}")
 
-        # Create a mock scryfall service that uses our pre-fetched cache
+        # I need to pass a scryfall service to the plot generator, but I already
+        # pre-fetched all the card data earlier, so just create a simple mock
+        # that returns from our cache instead of hitting the API again
         class MockScryfallService:
             @staticmethod
             def get_card_by_name(name, *args, **kwargs):
@@ -169,7 +172,7 @@ def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
         mock_service = MockScryfallService()
         mana_curve_url = PlotService.generate_mana_curve_plot(main_deck, mock_service)
 
-        # Cache for 24 hours if generation succeeded
+        # Store it in cache for 24 hours to avoid hitting the FileConvert API repeatedly
         if mana_curve_url:
             cache.set(plot_cache_key, mana_curve_url, 86400)
     else:
@@ -190,14 +193,14 @@ def deck_detail(request, deck_id):
     main_deck = [c for c in all_cards if not c.get("is_sideboard")]
     sideboard = [c for c in all_cards if c.get("is_sideboard")]
 
-    # Organize main deck by type
+    # Organize cards by type (Creature, Instant, Sorcery, etc.) for better display
     try:
         main_deck_organized = organize_cards_by_type(main_deck)
     except Exception:
         logger.exception("Failed to organize main deck for deck %s", deck_id)
         main_deck_organized = {}
 
-    # Keep sideboard as flat list
+    # Do the same for sideboard, then flatten it since we display it differently
     try:
         sideboard_list = organize_cards_by_type(sideboard)
     except Exception:
@@ -207,15 +210,16 @@ def deck_detail(request, deck_id):
     for cards_list in sideboard_list.values():
         sideboard_flat.extend(cards_list)
 
-    # Pre-fetch all unique card data concurrently to avoid sequential API fallbacks
+    # Fetch all card data in parallel instead of one-by-one - this is way faster
+    # and avoids hitting API rate limits when someone has lots of unique cards
     scryfall_service = ScryfallS3Service()
     unique_card_names = {c["card_name"] for c in all_cards}
-    
+
     card_data_cache = {}
-    
+
     def fetch_card_data(card_name):
         return card_name, scryfall_service.get_card_by_name(card_name)
-    
+
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_card = {executor.submit(fetch_card_data, name): name for name in unique_card_names}
         for future in as_completed(future_to_card):
@@ -226,7 +230,7 @@ def deck_detail(request, deck_id):
                 logger.exception(f"Failed to fetch data for card {future_to_card[future]}: {e}")
                 card_data_cache[future_to_card[future]] = None
 
-    # Calculate deck total price using pre-fetched data
+    # Now calculate the total price of the deck using the data we just fetched
     total_price = Decimal("0.00")
 
     def get_card_price(card_name):
@@ -239,8 +243,8 @@ def deck_detail(request, deck_id):
         price = get_card_price(card["card_name"])
         qty = Decimal(card["quantity"])
         total_price += price * qty
-        
-    # Generate Mana Curve Plot (with caching to avoid FileConvert API calls every time)
+
+    # Generate the mana curve plot (uses helper function with caching)
     mana_curve_url = _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache)
 
     context = {
@@ -253,17 +257,16 @@ def deck_detail(request, deck_id):
         "mana_curve_url": mana_curve_url,
     }
 
-    # Handle Voucher
+    # If the user already has a voucher for this deck, calculate the discount
     if deck.get("voucher_code"):
-        # Apply 20% discount
-        discount_percent = Decimal("0.20")
+        discount_percent = Decimal("0.20")  # 20% off
         discount_amount = total_price * discount_percent
         discounted_price = total_price - discount_amount
         context["discounted_price"] = round(discounted_price, 2)
         context["voucher_code"] = deck.get("voucher_code")
         context["voucher_image_url"] = deck.get("voucher_image_url")
 
-    # Handle QR code from session
+    # Check if we have a QR code in the session (gets stored there after generation)
     qr_session_key = f"qr_code_{deck_id}"
     if qr_session_key in request.session:
         context["qr_code_url"] = request.session[qr_session_key]
