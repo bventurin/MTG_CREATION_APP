@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (downloadBtn && ticketElement) {
         downloadBtn.addEventListener('click', function () {
             // Make sure the html2canvas library actually loaded from the CDN
-            if (typeof window.html2canvas === 'undefined') {
+            if (typeof html2canvas === 'undefined') {
                 console.error('html2canvas library is not loaded');
                 alert('Unable to generate voucher image. The html2canvas library failed to load. Please check your internet connection and refresh the page.');
                 return;
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function () {
             this.disabled = true;
 
             // Convert the voucher HTML element into a downloadable PNG image
-            window.html2canvas(ticketElement, {
+            html2canvas(ticketElement, {
                 scale: 2,  // Higher resolution for better quality
                 backgroundColor: null,  // Keep transparency
                 useCORS: true  // Allow external fonts/images to load
