@@ -156,7 +156,11 @@ def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
     updated_at = deck.get("updated_at", "unknown")
     plot_cache_key = f"mana_curve_{deck_id}_{updated_at}"
 
-    mana_curve_url = cache.get(plot_cache_key)
+    mana_curve_url = None
+    try:
+        mana_curve_url = cache.get(plot_cache_key)
+    except Exception as e:
+        logger.warning(f"Cache read failed for mana curve: {e}")
 
     if not mana_curve_url:
         logger.info(f"Generating new mana curve plot for deck {deck_id}")
@@ -174,7 +178,10 @@ def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
 
         # Store it in cache for 24 hours to avoid hitting the FileConvert API repeatedly
         if mana_curve_url:
-            cache.set(plot_cache_key, mana_curve_url, 86400)
+            try:
+                cache.set(plot_cache_key, mana_curve_url, 86400)
+            except Exception as e:
+                logger.warning(f"Cache write failed for mana curve: {e}")
     else:
         logger.info(f"Using cached mana curve plot for deck {deck_id}")
 
