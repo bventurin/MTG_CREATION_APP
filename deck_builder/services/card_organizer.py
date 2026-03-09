@@ -27,14 +27,20 @@ def get_card_type_category(type_line: str) -> str:
         return "Other"
 
 
-def organize_cards_by_type(cards_data: List[Dict]) -> Dict[str, List[Dict]]:
+def organize_cards_by_type(cards_data: List[Dict], card_data_cache: Dict[str, Dict] = None) -> Dict[str, List[Dict]]:
     # Organize cards by their type category.
+    # If card_data_cache is provided, use it instead of fetching from Scryfall again
     scryfall_service = ScryfallS3Service()
     organized = {}
 
     for card_info in cards_data:
         card_name = card_info.get("card_name")
-        card_data = scryfall_service.get_card_by_name(card_name)
+
+        # Use cache if available, otherwise fetch
+        if card_data_cache is not None and card_name in card_data_cache:
+            card_data = card_data_cache[card_name]
+        else:
+            card_data = scryfall_service.get_card_by_name(card_name)
 
         if not card_data:
             logger.warning(f"Card not found in Scryfall database: {card_name}")
@@ -107,7 +113,7 @@ def _should_update_representative(
     return not is_creature and not is_card_creature and card_price > highest_price
 
 
-def get_deck_metadata(cards_data: List[Dict]) -> Dict:
+def get_deck_metadata(cards_data: List[Dict], card_data_cache: Dict[str, Dict] = None) -> Dict:
     scryfall_service = ScryfallS3Service()
     colors = set()
     representative_card = None
@@ -116,7 +122,12 @@ def get_deck_metadata(cards_data: List[Dict]) -> Dict:
 
     for card_info in cards_data:
         card_name = card_info.get("card_name")
-        card_data = scryfall_service.get_card_by_name(card_name, allow_api_fallback=False)
+
+        # Use cache if available, otherwise fetch
+        if card_data_cache is not None and card_name in card_data_cache:
+            card_data = card_data_cache[card_name]
+        else:
+            card_data = scryfall_service.get_card_by_name(card_name, allow_api_fallback=False)
 
         if not card_data:
             continue

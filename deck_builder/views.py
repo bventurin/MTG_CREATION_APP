@@ -27,7 +27,6 @@ def parse_deck_list(text):
     """
     deck_name = None
     # Use a dict to group identical cards and sum their quantities
-    # Key: (card_name, is_sideboard) -> Value: quantity
     grouped_cards = {}
     lines = text.strip().split("\n")
     current_section = None
@@ -161,7 +160,6 @@ def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
     if not mana_curve_url:
         logger.info(f"Generating new mana curve plot for deck {deck_id}")
 
-        # I need to pass a scryfall service to the plot generator, but I already
         # pre-fetched all the card data earlier, so just create a simple mock
         # that returns from our cache instead of hitting the API again
         class MockScryfallService:
@@ -193,25 +191,8 @@ def deck_detail(request, deck_id):
     main_deck = [c for c in all_cards if not c.get("is_sideboard")]
     sideboard = [c for c in all_cards if c.get("is_sideboard")]
 
-    # Organize cards by type (Creature, Instant, Sorcery, etc.) for better display
-    try:
-        main_deck_organized = organize_cards_by_type(main_deck)
-    except Exception:
-        logger.exception("Failed to organize main deck for deck %s", deck_id)
-        main_deck_organized = {}
-
-    # Do the same for sideboard, then flatten it since we display it differently
-    try:
-        sideboard_list = organize_cards_by_type(sideboard)
-    except Exception:
-        logger.exception("Failed to organize sideboard for deck %s", deck_id)
-        sideboard_list = {}
-    sideboard_flat = []
-    for cards_list in sideboard_list.values():
-        sideboard_flat.extend(cards_list)
-
-    # Fetch all card data in parallel instead of one-by-one - this is way faster
-    # and avoids hitting API rate limits when someone has lots of unique cards
+    # Fetch all card data in parallel first
+    # And avoid hitting API rate limits when someone has lots of unique cards
     scryfall_service = ScryfallS3Service()
     unique_card_names = {c["card_name"] for c in all_cards}
 
@@ -229,6 +210,24 @@ def deck_detail(request, deck_id):
             except Exception as e:
                 logger.exception(f"Failed to fetch data for card {future_to_card[future]}: {e}")
                 card_data_cache[future_to_card[future]] = None
+
+    # Organize cards by type (Creature, Instant, Sorcery, etc.) for better display
+    # Now we pass the cache so we don't re-fetch the same cards
+    try:
+        main_deck_organized = organize_cards_by_type(main_deck, card_data_cache)
+    except Exception:
+        logger.exception("Failed to organize main deck for deck %s", deck_id)
+        main_deck_organized = {}
+
+    # Do the same for sideboard, then flatten it since we display it differently
+    try:
+        sideboard_list = organize_cards_by_type(sideboard, card_data_cache)
+    except Exception:
+        logger.exception("Failed to organize sideboard for deck %s", deck_id)
+        sideboard_list = {}
+    sideboard_flat = []
+    for cards_list in sideboard_list.values():
+        sideboard_flat.extend(cards_list)
 
     # Now calculate the total price of the deck using the data we just fetched
     total_price = Decimal("0.00")
