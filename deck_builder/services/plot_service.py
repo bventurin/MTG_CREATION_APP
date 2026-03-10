@@ -149,11 +149,11 @@ class PlotService:
             upload_meta = cls._get_upload_url(filename)
 
             # Upload the CSV string
-            logger.info(f"Uploading CSV data to S3")
+            logger.info("Uploading CSV data to S3")
             cls._upload_data(upload_meta["upload_url"], csv_data)
 
             # Generate the plot
-            logger.info(f"Requesting plot generation from FileConvert API")
+            logger.info("Requesting plot generation from FileConvert API")
             plot_url = cls._generate_plot(upload_meta["download_url"], "bar")
 
             logger.info(f"Successfully generated mana curve plot: {plot_url}")
