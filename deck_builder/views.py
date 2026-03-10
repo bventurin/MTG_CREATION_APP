@@ -151,7 +151,11 @@ def deck_list(request):
 
 
 def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
-    """Helper function to get cached mana curve or generate a new one asynchronously."""
+    """Helper function to get cached mana curve or generate a new one.
+
+    Generates synchronously since the FileConvert API is fast (~1-2s).
+    """
+    PLOT_CACHE_TTL = 2700  # 45 minutes 
     # Use the deck's updated_at timestamp to invalidate cache when deck changes
     updated_at = deck.get("updated_at", "unknown")
     plot_cache_key = f"mana_curve_{deck_id}_{updated_at}"
@@ -163,7 +167,7 @@ def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
         logger.warning(f"Cache read failed for mana curve: {e}")
 
     if not mana_curve_url:
-        logger.info(f"Mana curve plot not in cache for deck {deck_id}, starting async generation")
+        logger.info(f"Mana curve plot not in cache for deck {deck_id}, generating now")
 
         # I need to pass a scryfall service to the plot generator, but I already
         # pre-fetched all the card data earlier, so just create a simple mock
@@ -175,13 +179,17 @@ def _get_or_generate_mana_curve(deck, deck_id, main_deck, card_data_cache):
 
         mock_service = MockScryfallService()
 
-        # Start async generation in background thread - page loads immediately
-        PlotService.generate_mana_curve_plot_async(
-            deck_id, main_deck, mock_service, plot_cache_key
-        )
-
-        # Return None for now - plot will appear on next page load or via JS refresh
-        return None
+        try:
+            mana_curve_url = PlotService.generate_mana_curve_plot(main_deck, mock_service)
+            if mana_curve_url:
+                try:
+                    cache.set(plot_cache_key, mana_curve_url, PLOT_CACHE_TTL)
+                    logger.info(f"Mana curve plot generated and cached for deck {deck_id}")
+                except Exception as e:
+                    logger.warning(f"Cache write failed for mana curve: {e}")
+        except Exception as e:
+            logger.error(f"Mana curve plot generation failed for deck {deck_id}: {e}")
+            mana_curve_url = None
     else:
         logger.info(f"Using cached mana curve plot for deck {deck_id}")
 

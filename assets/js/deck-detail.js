@@ -1,87 +1,9 @@
 /**
  * Deck Detail Page - Client-Side Functionality
  * Handles the loading states for AI suggestions and voucher image downloads
- * Also handles auto-refresh for async-generated mana curve plots
  */
 
 document.addEventListener('DOMContentLoaded', function () {
-    // Auto-refresh mana curve plot if it's generating in the background
-    const manaCurvePlaceholder = document.getElementById('mana-curve-placeholder');
-
-    if (manaCurvePlaceholder) {
-        console.log('Mana curve placeholder detected - starting polling');
-
-        // Extract deck ID from URL (e.g., /decks/abc-123-def/)
-        const deckId = window.location.pathname.split('/')[2];
-        const checkUrl = `/decks/${deckId}/plot-status/`;
-
-        // Poll every 3 seconds for up to 30 seconds
-        let pollCount = 0;
-        const maxPolls = 10;  // 10 polls × 3 seconds = 30 seconds max
-
-        const pollInterval = setInterval(function() {
-            pollCount++;
-            console.log(`Polling for mana curve (attempt ${pollCount}/${maxPolls})...`);
-
-            // Check if plot is ready via lightweight JSON endpoint
-            fetch(checkUrl, { credentials: 'same-origin' })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Server returned ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.ready && data.url) {
-                    // Plot is ready! Replace the placeholder in-place
-                    console.log('Mana curve plot is ready, updating page...');
-                    clearInterval(pollInterval);
-
-                    manaCurvePlaceholder.id = 'mana-curve-section';
-                    manaCurvePlaceholder.innerHTML = `
-                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0"><i class="bi bi-bar-chart-fill me-2"></i>Mana Curve</h5>
-                            <small class="text-white-50">Powered by <a href="https://fileapi.arijitdeb.com" target="_blank"
-                                class="text-info text-decoration-underline">FileConvert API</a></small>
-                        </div>
-                        <div class="card-body text-center bg-light py-4">
-                            <div class="overflow-hidden mx-auto rounded bg-white shadow-sm border" style="max-width: 620px;">
-                                <img src="${data.url}" alt="Deck Mana Curve" class="img-fluid"
-                                    style="margin-top: -40px; margin-bottom: -15px; width: 104%; max-width: 104%; margin-left: -2%;">
-                            </div>
-                        </div>
-                    `;
-                } else if (pollCount >= maxPolls) {
-                    // Timeout - stop polling and show message
-                    clearInterval(pollInterval);
-                    console.log('Mana curve plot generation timed out');
-
-                    // Update placeholder to show timeout message
-                    const cardBody = manaCurvePlaceholder.querySelector('.card-body');
-                    if (cardBody) {
-                        cardBody.innerHTML = `
-                            <div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 200px;">
-                                <i class="bi bi-exclamation-triangle text-warning mb-3" style="font-size: 2rem;"></i>
-                                <p class="text-muted mb-2">Plot generation is taking longer than expected</p>
-                                <button class="btn btn-sm btn-primary" onclick="window.location.reload()">
-                                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh Page
-                                </button>
-                            </div>
-                        `;
-                    }
-                } else {
-                    console.log('Plot not ready yet, will retry...');
-                }
-            })
-            .catch(err => {
-                console.error('Error polling for mana curve:', err);
-                if (pollCount >= maxPolls) {
-                    clearInterval(pollInterval);
-                }
-            });
-        }, 3000);
-    }
-
     // When user clicks "Get AI Suggestions", show a loading spinner while it processes
     const aiBtn = document.getElementById('ai-suggestions-btn');
     if (aiBtn) {

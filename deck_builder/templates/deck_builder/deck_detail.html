@@ -98,24 +98,6 @@
             </div>
         </div>
     </div>
-    {% elif main_deck_count > 0 %}
-    <!-- Placeholder shown while plot is generating in background -->
-    <div id="mana-curve-placeholder" class="card mb-4 shadow-sm">
-        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-bar-chart-fill me-2"></i>Mana Curve</h5>
-            <small class="text-white-50">Powered by <a href="https://fileapi.arijitdeb.com" target="_blank"
-                    class="text-info text-decoration-underline">FileConvert API</a></small>
-        </div>
-        <div class="card-body text-center bg-light py-4">
-            <div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 200px;">
-                <div class="spinner-border text-primary mb-3" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p class="text-muted mb-0">Generating mana curve chart...</p>
-                <small class="text-muted">This usually takes 5-10 seconds</small>
-            </div>
-        </div>
-    </div>
     {% endif %}
 
     <!-- Main Deck -->
