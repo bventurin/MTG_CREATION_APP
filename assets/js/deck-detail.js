@@ -6,41 +6,59 @@
 
 document.addEventListener('DOMContentLoaded', function () {
     // Auto-refresh mana curve plot if it's generating in the background
-    const manaCurveSection = document.getElementById('mana-curve-section');
     const manaCurvePlaceholder = document.getElementById('mana-curve-placeholder');
 
-    if (manaCurvePlaceholder && !manaCurveSection) {
-        // Plot is being generated - poll for it every 3 seconds for up to 30 seconds
+    if (manaCurvePlaceholder) {
+        console.log('Mana curve placeholder detected - starting polling');
+
+        // Extract deck ID from URL (e.g., /decks/abc-123-def/)
+        const deckId = window.location.pathname.split('/')[2];
+        const checkUrl = `/decks/${deckId}/plot-status/`;
+
+        // Poll for it every 3 seconds for up to 30 seconds
         let pollCount = 0;
         const maxPolls = 10;  // 10 polls × 3 seconds = 30 seconds max
 
         const pollInterval = setInterval(function() {
             pollCount++;
+            console.log(`Polling for mana curve (attempt ${pollCount}/${maxPolls})...`);
 
-            // Check if plot is ready by reloading just the mana curve section
-            fetch(window.location.href, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            })
-            .then(response => response.text())
-            .then(html => {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                const newManaCurveSection = doc.getElementById('mana-curve-section');
-
-                if (newManaCurveSection) {
-                    // Plot is ready! Replace placeholder with the actual plot
-                    manaCurvePlaceholder.replaceWith(newManaCurveSection);
+            // Check if plot is ready via lightweight JSON endpoint
+            fetch(checkUrl)
+            .then(response => response.json())
+            .then(data => {
+                if (data.ready && data.url) {
+                    // Plot is ready! Reload the page to show it
+                    console.log('Mana curve plot is ready, reloading page...');
                     clearInterval(pollInterval);
-                    console.log('Mana curve plot loaded successfully');
+                    window.location.reload();
                 } else if (pollCount >= maxPolls) {
-                    // Timeout - stop polling
+                    // Timeout - stop polling and show message
                     clearInterval(pollInterval);
                     console.log('Mana curve plot generation timed out');
+
+                    // Update placeholder to show timeout message
+                    const cardBody = manaCurvePlaceholder.querySelector('.card-body');
+                    if (cardBody) {
+                        cardBody.innerHTML = `
+                            <div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 200px;">
+                                <i class="bi bi-exclamation-triangle text-warning mb-3" style="font-size: 2rem;"></i>
+                                <p class="text-muted mb-2">Plot generation is taking longer than expected</p>
+                                <button class="btn btn-sm btn-primary" onclick="window.location.reload()">
+                                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh Page
+                                </button>
+                            </div>
+                        `;
+                    }
+                } else {
+                    console.log('Plot not ready yet, will retry...');
                 }
             })
             .catch(err => {
                 console.error('Error polling for mana curve:', err);
-                clearInterval(pollInterval);
+                if (pollCount >= maxPolls) {
+                    clearInterval(pollInterval);
+                }
             });
         }, 3000);
     }

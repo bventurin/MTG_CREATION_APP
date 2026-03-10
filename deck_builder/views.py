@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
 from .services.dynamodb_service import DynamoDBService
 from .services.card_organizer import organize_cards_by_type, get_deck_metadata
@@ -471,3 +471,27 @@ def add_voucher(request, deck_id):
         )
 
     return redirect("deck_detail", deck_id=deck_id)
+
+
+@login_required(login_url="login")
+def check_plot_status(request, deck_id):
+    """Check if mana curve plot is ready in cache (lightweight JSON endpoint)"""
+    db = DynamoDBService()
+    deck = db.get_deck(str(request.user.id), str(deck_id))
+
+    if not deck:
+        return JsonResponse({"ready": False, "error": "Deck not found"}, status=404)
+
+    # Check cache using the same key pattern as deck_detail view
+    updated_at = deck.get("updated_at", "unknown")
+    plot_cache_key = f"mana_curve_{deck_id}_{updated_at}"
+
+    try:
+        mana_curve_url = cache.get(plot_cache_key)
+        if mana_curve_url:
+            return JsonResponse({"ready": True, "url": mana_curve_url})
+        else:
+            return JsonResponse({"ready": False})
+    except Exception as e:
+        logger.error(f"Failed to check plot status for deck {deck_id}: {e}")
+        return JsonResponse({"ready": False, "error": "Cache error"}, status=500)

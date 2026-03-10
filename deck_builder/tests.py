@@ -299,6 +299,131 @@ class PlotServiceTests(TestCase):
             result = PlotService.generate_mana_curve_plot([{"card_name": "Bolt", "quantity": 4}], svc)
         self.assertEqual(result, "http://plot.png")
 
+    @patch("deck_builder.services.plot_service.cache")
+    @patch("deck_builder.services.plot_service.threading.Thread")
+    def test_async_generation_starts_thread(self, mock_thread, mock_cache):
+        """Test that async generation starts a background thread."""
+        svc = MagicMock()
+        svc.get_card_by_name.return_value = {"cmc": 2, "type_line": "Instant"}
+        main_deck = [{"card_name": "Bolt", "quantity": 4}]
+
+        PlotService.generate_mana_curve_plot_async("deck-123", main_deck, svc, "test_cache_key")
+
+        # Verify thread was created and started
+        mock_thread.assert_called_once()
+        mock_thread.return_value.start.assert_called_once()
+
+    @patch("deck_builder.services.plot_service.cache")
+    @patch.object(PlotService, "generate_mana_curve_plot", return_value="http://plot.png")
+    def test_async_generation_caches_result(self, mock_generate, mock_cache):
+        """Test that async generation caches the plot URL when successful."""
+        import threading
+        svc = MagicMock()
+        main_deck = [{"card_name": "Bolt", "quantity": 4}]
+
+        # Call the async method which starts a thread
+        PlotService.generate_mana_curve_plot_async("deck-123", main_deck, svc, "test_key")
+
+        # Wait for thread to complete (the thread is created in the method)
+        import time
+        time.sleep(0.1)
+
+        # Verify cache.set was called
+        mock_cache.set.assert_called_once_with("test_key", "http://plot.png", 86400)
+
+    @patch("deck_builder.services.plot_service.cache")
+    @patch.object(PlotService, "generate_mana_curve_plot", return_value=None)
+    def test_async_generation_handles_none_result(self, mock_generate, mock_cache):
+        """Test that async generation handles None result gracefully."""
+        svc = MagicMock()
+        main_deck = [{"card_name": "Island", "quantity": 20}]  # Lands only
+
+        PlotService.generate_mana_curve_plot_async("deck-123", main_deck, svc, "test_key")
+
+        # Wait for thread
+        import time
+        time.sleep(0.1)
+
+        # cache.set should not be called when result is None
+        mock_cache.set.assert_not_called()
+
+    @patch("deck_builder.services.plot_service.cache")
+    @patch.object(PlotService, "generate_mana_curve_plot", side_effect=Exception("API failure"))
+    def test_async_generation_handles_exception(self, mock_generate, mock_cache):
+        """Test that async generation handles exceptions without crashing."""
+        svc = MagicMock()
+        main_deck = [{"card_name": "Bolt", "quantity": 4}]
+
+        # Should not raise - exception is caught in background thread
+        PlotService.generate_mana_curve_plot_async("deck-123", main_deck, svc, "test_key")
+
+        # Wait for thread
+        import time
+        time.sleep(0.1)
+
+        # cache.set should not be called due to exception
+        mock_cache.set.assert_not_called()
+
+    @patch("deck_builder.services.plot_service.requests.get")
+    def test_get_upload_url_retries_on_failure(self, mock_get):
+        """Test that _get_upload_url retries up to 3 times on failure."""
+        # First two calls fail, third succeeds
+        mock_get.side_effect = [
+            Exception("Network error"),
+            Exception("Network error"),
+            MagicMock(status_code=200, json=MagicMock(return_value={"upload_url": "http://u", "download_url": "http://d"}))
+        ]
+
+        with patch("deck_builder.services.plot_service.time.sleep"):  # Skip actual sleep
+            result = PlotService._get_upload_url("test.csv")
+
+        self.assertEqual(result, {"upload_url": "http://u", "download_url": "http://d"})
+        self.assertEqual(mock_get.call_count, 3)
+
+    @patch("deck_builder.services.plot_service.requests.get")
+    def test_get_upload_url_fails_after_retries(self, mock_get):
+        """Test that _get_upload_url raises after all retries exhausted."""
+        mock_get.side_effect = Exception("Network error")
+
+        with patch("deck_builder.services.plot_service.time.sleep"):
+            with self.assertRaises(Exception):
+                PlotService._get_upload_url("test.csv")
+
+        self.assertEqual(mock_get.call_count, 3)
+
+    @patch("deck_builder.services.plot_service.requests.put")
+    def test_upload_data_retries_on_failure(self, mock_put):
+        """Test that _upload_data retries up to 3 times on failure."""
+        # First two calls fail, third succeeds
+        mock_put.side_effect = [
+            Exception("Upload failed"),
+            Exception("Upload failed"),
+            MagicMock(status_code=200)
+        ]
+        mock_put.return_value.raise_for_status = MagicMock()
+
+        with patch("deck_builder.services.plot_service.time.sleep"):
+            PlotService._upload_data("http://upload", "data")
+
+        self.assertEqual(mock_put.call_count, 3)
+
+    @patch("deck_builder.services.plot_service.requests.post")
+    def test_generate_plot_retries_on_failure(self, mock_post):
+        """Test that _generate_plot retries up to 3 times on failure."""
+        # First two calls fail, third succeeds
+        mock_post.side_effect = [
+            Exception("API error"),
+            Exception("API error"),
+            MagicMock(status_code=200, json=MagicMock(return_value={"url": "http://plot.png"}))
+        ]
+        mock_post.return_value.raise_for_status = MagicMock()
+
+        with patch("deck_builder.services.plot_service.time.sleep"):
+            result = PlotService._generate_plot("http://data", "bar")
+
+        self.assertEqual(result, "http://plot.png")
+        self.assertEqual(mock_post.call_count, 3)
+
 
 # ---------------------------------------------------------------------------
 # Views
@@ -1097,3 +1222,136 @@ class AddVoucherMissingDeckTests(TestCase):
         MockDB.return_value.get_deck.return_value = None
         response = self.client.post(reverse("add_voucher", kwargs={"deck_id": DECK_UUID}))
         self.assertRedirects(response, reverse("deck_list"), fetch_redirect_response=False)
+
+
+class CheckPlotStatusViewTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("plot_status_user"))
+
+    @patch("deck_builder.views.DynamoDBService")
+    def test_missing_deck_returns_404(self, MockDB):
+        """Test that check_plot_status returns 404 when deck is not found."""
+        MockDB.return_value.get_deck.return_value = None
+        response = self.client.get(reverse("check_plot_status", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 404)
+        data = response.json()
+        self.assertFalse(data["ready"])
+        self.assertEqual(data["error"], "Deck not found")
+
+    @patch("deck_builder.views.cache")
+    @patch("deck_builder.views.DynamoDBService")
+    def test_plot_ready_returns_url(self, MockDB, mock_cache):
+        """Test that check_plot_status returns plot URL when cached."""
+        MockDB.return_value.get_deck.return_value = {
+            "deck_id": DECK_UUID,
+            "name": "Test Deck",
+            "updated_at": "2025-01-01T00:00:00"
+        }
+        mock_cache.get.return_value = "http://plot.example.com/mana_curve.png"
+
+        response = self.client.get(reverse("check_plot_status", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ready"])
+        self.assertEqual(data["url"], "http://plot.example.com/mana_curve.png")
+
+    @patch("deck_builder.views.cache")
+    @patch("deck_builder.views.DynamoDBService")
+    def test_plot_not_ready_returns_false(self, MockDB, mock_cache):
+        """Test that check_plot_status returns ready=false when plot not cached."""
+        MockDB.return_value.get_deck.return_value = {
+            "deck_id": DECK_UUID,
+            "name": "Test Deck",
+            "updated_at": "2025-01-01T00:00:00"
+        }
+        mock_cache.get.return_value = None
+
+        response = self.client.get(reverse("check_plot_status", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["ready"])
+        self.assertNotIn("url", data)
+
+    @patch("deck_builder.views.cache")
+    @patch("deck_builder.views.DynamoDBService")
+    def test_cache_error_returns_500(self, MockDB, mock_cache):
+        """Test that check_plot_status returns 500 on cache error."""
+        MockDB.return_value.get_deck.return_value = {
+            "deck_id": DECK_UUID,
+            "name": "Test Deck",
+            "updated_at": "2025-01-01T00:00:00"
+        }
+        mock_cache.get.side_effect = Exception("Cache failure")
+
+        response = self.client.get(reverse("check_plot_status", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertFalse(data["ready"])
+        self.assertEqual(data["error"], "Cache error")
+
+    def test_anonymous_user_redirected(self):
+        """Test that anonymous users are redirected to login."""
+        self.client.logout()
+        response = self.client.get(reverse("check_plot_status", kwargs={"deck_id": DECK_UUID}))
+        self.assertEqual(response.status_code, 302)
+
+
+class GetOrGenerateManaCurveTests(TestCase):
+
+    def setUp(self):
+        self.client.force_login(make_user("mana_curve_user"))
+
+    @patch("deck_builder.views.PlotService")
+    @patch("deck_builder.views.cache")
+    @patch("deck_builder.views.ScryfallS3Service")
+    @patch("deck_builder.views.organize_cards_by_type", return_value={})
+    @patch("deck_builder.views.DynamoDBService")
+    def test_cache_miss_starts_async_generation(self, MockDB, _, MockScryfall, mock_cache, MockPlot):
+        """Test that _get_or_generate_mana_curve starts async generation on cache miss."""
+        MockDB.return_value.get_deck.return_value = {
+            "deck_id": DECK_UUID,
+            "name": "Test Deck",
+            "updated_at": "2025-01-01T00:00:00"
+        }
+        MockDB.return_value.get_deck_cards.return_value = [
+            {"card_name": "Bolt", "quantity": 4, "is_sideboard": False}
+        ]
+        MockScryfall.return_value.get_card_by_name.return_value = None
+        MockScryfall.get_card_price.return_value = 0.0
+        mock_cache.get.return_value = None  # Cache miss
+
+        response = self.client.get(reverse("deck_detail", kwargs={"deck_id": DECK_UUID}))
+
+        # Verify async generation was called
+        MockPlot.generate_mana_curve_plot_async.assert_called_once()
+        self.assertEqual(response.status_code, 200)
+        # mana_curve_url should be None (plot generating in background)
+        self.assertIsNone(response.context.get("mana_curve_url"))
+
+    @patch("deck_builder.views.PlotService")
+    @patch("deck_builder.views.cache")
+    @patch("deck_builder.views.ScryfallS3Service")
+    @patch("deck_builder.views.organize_cards_by_type", return_value={})
+    @patch("deck_builder.views.DynamoDBService")
+    def test_cache_hit_returns_url_immediately(self, MockDB, _, MockScryfall, mock_cache, MockPlot):
+        """Test that _get_or_generate_mana_curve returns cached URL immediately."""
+        MockDB.return_value.get_deck.return_value = {
+            "deck_id": DECK_UUID,
+            "name": "Test Deck",
+            "updated_at": "2025-01-01T00:00:00"
+        }
+        MockDB.return_value.get_deck_cards.return_value = [
+            {"card_name": "Bolt", "quantity": 4, "is_sideboard": False}
+        ]
+        MockScryfall.return_value.get_card_by_name.return_value = None
+        MockScryfall.get_card_price.return_value = 0.0
+        mock_cache.get.return_value = "http://cached-plot.png"  # Cache hit
+
+        response = self.client.get(reverse("deck_detail", kwargs={"deck_id": DECK_UUID}))
+
+        # Verify async generation was NOT called
+        MockPlot.generate_mana_curve_plot_async.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        # mana_curve_url should be the cached value
+        self.assertEqual(response.context.get("mana_curve_url"), "http://cached-plot.png")

@@ -131,13 +131,12 @@ class DynamoDBService:
         voucher_code,
     ):
         # Apply a voucher to a deck.
-        timestamp = datetime.now().isoformat()
+        # This prevents invalidating the mana curve plot cache
 
-        update_expression = "SET voucher_code = :code, voucher_discount = :discount, updated_at = :updated"
+        update_expression = "SET voucher_code = :code, voucher_discount = :discount"
         expression_attribute_values = {
             ":code": voucher_code,
             ":discount": Decimal("20"),  # 20% discount
-            ":updated": timestamp,
         }
 
         self.table.update_item(
