@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const deckId = window.location.pathname.split('/')[2];
         const checkUrl = `/decks/${deckId}/plot-status/`;
 
-        // Poll for it every 3 seconds for up to 30 seconds
+        // Poll every 3 seconds for up to 30 seconds
         let pollCount = 0;
         const maxPolls = 10;  // 10 polls × 3 seconds = 30 seconds max
 
@@ -24,14 +24,33 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log(`Polling for mana curve (attempt ${pollCount}/${maxPolls})...`);
 
             // Check if plot is ready via lightweight JSON endpoint
-            fetch(checkUrl)
-            .then(response => response.json())
+            fetch(checkUrl, { credentials: 'same-origin' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.ready && data.url) {
-                    // Plot is ready! Reload the page to show it
-                    console.log('Mana curve plot is ready, reloading page...');
+                    // Plot is ready! Replace the placeholder in-place
+                    console.log('Mana curve plot is ready, updating page...');
                     clearInterval(pollInterval);
-                    window.location.reload();
+
+                    manaCurvePlaceholder.id = 'mana-curve-section';
+                    manaCurvePlaceholder.innerHTML = `
+                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-bar-chart-fill me-2"></i>Mana Curve</h5>
+                            <small class="text-white-50">Powered by <a href="https://fileapi.arijitdeb.com" target="_blank"
+                                class="text-info text-decoration-underline">FileConvert API</a></small>
+                        </div>
+                        <div class="card-body text-center bg-light py-4">
+                            <div class="overflow-hidden mx-auto rounded bg-white shadow-sm border" style="max-width: 620px;">
+                                <img src="${data.url}" alt="Deck Mana Curve" class="img-fluid"
+                                    style="margin-top: -40px; margin-bottom: -15px; width: 104%; max-width: 104%; margin-left: -2%;">
+                            </div>
+                        </div>
+                    `;
                 } else if (pollCount >= maxPolls) {
                     // Timeout - stop polling and show message
                     clearInterval(pollInterval);

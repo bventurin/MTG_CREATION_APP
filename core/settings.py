@@ -223,7 +223,7 @@ CACHES = {
         'LOCATION': CACHE_DIR,
         'TIMEOUT': 86400,  # 24 hours — matches the Scryfall daily Lambda update
         'OPTIONS': {
-            'MAX_ENTRIES': 10,  # card data is large; keep entry count low
+            'MAX_ENTRIES': 100,  # needs to accommodate card data + mana curve plots
         },
     }
 }
