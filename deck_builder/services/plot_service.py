@@ -1,7 +1,6 @@
 import os
 import requests
 import logging
-from pathlib import Path
 import uuid
 import time
 import threading
@@ -38,7 +37,7 @@ class PlotService:
                 )
                 response.raise_for_status()
                 return response.json()
-            except requests.exceptions.RequestException as e:
+            except Exception as e:
                 if attempt < max_retries - 1:
                     wait_time = 2 ** attempt  # 1s, 2s, 4s
                     logger.warning(f"Upload URL request failed (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s: {e}")
@@ -61,7 +60,7 @@ class PlotService:
                 )
                 put_response.raise_for_status()
                 return
-            except requests.exceptions.RequestException as e:
+            except Exception as e:
                 if attempt < max_retries - 1:
                     wait_time = 2 ** attempt
                     logger.warning(f"Data upload failed (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s: {e}")
@@ -95,7 +94,7 @@ class PlotService:
                 if "url" not in payload:
                     raise ValueError("ConvertData response missing 'url'")
                 return payload.get("url")
-            except (requests.exceptions.RequestException, ValueError) as e:
+            except Exception as e:
                 if attempt < max_retries - 1:
                     wait_time = 2 ** attempt
                     logger.warning(f"Plot generation failed (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s: {e}")
