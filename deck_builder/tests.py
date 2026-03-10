@@ -1280,24 +1280,32 @@ class DeckDetailCacheBehaviourTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["mana_curve_url"], "http://cached-plot.png")
-        MockPlot.generate_mana_curve_plot_async.assert_not_called()
+        # Synchronous generation should NOT be called when cache hits
+        MockPlot.generate_mana_curve_plot.assert_not_called()
 
     @patch("deck_builder.views.cache")
     @patch("deck_builder.views.PlotService")
     @patch("deck_builder.views.ScryfallS3Service")
     @patch("deck_builder.views.organize_cards_by_type", return_value={})
     @patch("deck_builder.views.DynamoDBService")
-    def test_cache_miss_triggers_async_generation(self, MockDB, _, MockScryfall, MockPlot, mock_cache):
-        """When cache misses, async generation is triggered and context has no URL."""
+    def test_cache_miss_triggers_sync_generation(self, MockDB, _, MockScryfall, MockPlot, mock_cache):
+        """When cache misses, synchronous generation is triggered and URL is in context."""
         MockDB.return_value.get_deck.return_value = dict(MOCK_DECK)
         MockDB.return_value.get_deck_cards.return_value = list(MOCK_CARDS)
         MockScryfall.return_value.get_card_by_name.return_value = None
         MockScryfall.get_card_price.return_value = 0.0
         mock_cache.get.return_value = None
+        MockPlot.generate_mana_curve_plot.return_value = "http://new-plot.png"
 
         response = self.client.get(reverse("deck_detail", kwargs={"deck_id": DECK_UUID}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.context["mana_curve_url"])
-        MockPlot.generate_mana_curve_plot_async.assert_called_once()
+        self.assertEqual(response.context["mana_curve_url"], "http://new-plot.png")
+        MockPlot.generate_mana_curve_plot.assert_called_once()
+        # Verify the result was cached with 45-min TTL
+        mock_cache.set.assert_called_once_with(
+            mock_cache.set.call_args[0][0],  # cache key (dynamic)
+            "http://new-plot.png",
+            2700,  # 45-minute TTL
+        )
 
