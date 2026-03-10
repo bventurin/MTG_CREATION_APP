@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseBadRequest, JsonResponse
+from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from .services.dynamodb_service import DynamoDBService
 from .services.card_organizer import organize_cards_by_type, get_deck_metadata
@@ -473,6 +473,7 @@ def add_voucher(request, deck_id):
     return redirect("deck_detail", deck_id=deck_id)
 
 
+@require_http_methods(["GET"])
 @login_required(login_url="login")
 def check_plot_status(request, deck_id):
     """Check if mana curve plot is ready in cache (lightweight JSON endpoint)"""
