@@ -1,9 +1,50 @@
 /**
  * Deck Detail Page - Client-Side Functionality
  * Handles the loading states for AI suggestions and voucher image downloads
+ * Also handles auto-refresh for async-generated mana curve plots
  */
 
 document.addEventListener('DOMContentLoaded', function () {
+    // Auto-refresh mana curve plot if it's generating in the background
+    const manaCurveSection = document.getElementById('mana-curve-section');
+    const manaCurvePlaceholder = document.getElementById('mana-curve-placeholder');
+
+    if (manaCurvePlaceholder && !manaCurveSection) {
+        // Plot is being generated - poll for it every 3 seconds for up to 30 seconds
+        let pollCount = 0;
+        const maxPolls = 10;  // 10 polls × 3 seconds = 30 seconds max
+
+        const pollInterval = setInterval(function() {
+            pollCount++;
+
+            // Check if plot is ready by reloading just the mana curve section
+            fetch(window.location.href, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newManaCurveSection = doc.getElementById('mana-curve-section');
+
+                if (newManaCurveSection) {
+                    // Plot is ready! Replace placeholder with the actual plot
+                    manaCurvePlaceholder.replaceWith(newManaCurveSection);
+                    clearInterval(pollInterval);
+                    console.log('Mana curve plot loaded successfully');
+                } else if (pollCount >= maxPolls) {
+                    // Timeout - stop polling
+                    clearInterval(pollInterval);
+                    console.log('Mana curve plot generation timed out');
+                }
+            })
+            .catch(err => {
+                console.error('Error polling for mana curve:', err);
+                clearInterval(pollInterval);
+            });
+        }, 3000);
+    }
+
     // When user clicks "Get AI Suggestions", show a loading spinner while it processes
     const aiBtn = document.getElementById('ai-suggestions-btn');
     if (aiBtn) {
