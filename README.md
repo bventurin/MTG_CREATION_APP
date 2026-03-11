@@ -47,18 +47,21 @@ Built with Django, backed by AWS DynamoDB and Supabase, and deployed on AWS Elas
 
 ## Getting Started (Local Development)
 
+You can run the app locally without any AWS, Supabase, or external API credentials. When `DATABASE_URL` is not set, the app automatically uses a local **SQLite** database, so you can explore and develop without touching any cloud infrastructure.
+
 ### 1. Clone and set up your environment
 
 ```bash
 git clone https://github.com/brennoventurini/Magic-Project.git
 cd "Magic Project"
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate 
 pip install -r requirements.txt
 ```
 
-
 ### 2. Run migrations and start the server
+
+No environment variables are required for a basic local run. Just migrate and go:
 
 ```bash
 python manage.py migrate
@@ -66,6 +69,10 @@ python manage.py runserver
 ```
 
 Then open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser.
+
+You'll see a warning in the console that SQLite is being used — that's expected and fine for local development.
+
+> **Note:** Features that depend on external services (AI recommendations, QR codes, card data from S3, and vouchers) won't work without their respective API keys. To enable them, create a `.env` file in the project root and add the relevant keys. These are optional — the rest of the app (deck creation, user accounts, etc.) works out of the box with SQLite.
 
 ## Deployment
 
